@@ -226,28 +226,3 @@ export const Dashboard: React.FC<DashboardProps> = ({ league, onBack }) => {
     </div>
   );
 };
-
-          </div>
-        )}
-
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Standings */}
-          <div className="lg:col-span-2">
-            <StandingsTable rosters={rosters} users={users} />
-          </div>
-
-          {/* Recent Activity */}
-          <div>
-            <RecentActivity transactions={transactions} users={users} />
-          </div>
-        </div>
-
-        {/* Matchups */}
-        <div className="mt-8">
-          <MatchupGrid matchups={matchups} rosters={rosters} users={users} currentWeek={currentWeek} />
-        </div>
-      </div>
-    </div>
-  );
-};
