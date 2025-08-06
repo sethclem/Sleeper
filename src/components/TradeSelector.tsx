@@ -39,18 +39,18 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     
     try {
       const draftsData = await SleeperAPI.getLeagueDrafts(leagueId);
-      console.log('Raw drafts data:', draftsData);
+      console.log('Raw drafts data:', JSON.stringify(draftsData, null, 2));
       setDrafts(draftsData);
       
       // Load picks for each draft
       const allPicks: Record<string, DraftPickDetail[]> = {};
       for (const draft of draftsData) {
-        console.log('Loading picks for draft:', draft.draft_id, 'season:', draft.season);
+        console.log('Loading picks for draft:', draft.draft_id, 'season:', draft.season, 'league_id:', draft.league_id);
         const picks = await SleeperAPI.getDraftPicks(draft.draft_id);
-        console.log('Loaded picks for draft:', draft.draft_id, 'count:', picks.length);
+        console.log('Loaded picks for draft:', draft.draft_id, 'count:', picks.length, 'sample picks:', picks.slice(0, 3));
         allPicks[draft.draft_id] = picks;
       }
-      console.log('All draft picks loaded:', Object.keys(allPicks));
+      console.log('All draft picks loaded:', Object.keys(allPicks), 'total drafts:', Object.keys(allPicks).length);
       setDraftPicks(allPicks);
       
       // Load previous season data for pick inference
@@ -70,8 +70,11 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       (trade.draft_picks || []).forEach(pick => {
         const previousSeason = (parseInt(pick.season) - 1).toString();
         seasonsToLoad.add(previousSeason);
+        console.log('Need previous season data for:', previousSeason, 'to calculate', pick.season, 'pick standings');
       });
     });
+    
+    console.log('Seasons to load previous data for:', Array.from(seasonsToLoad));
     
     const previousRosters: Record<string, SleeperRoster[]> = {};
     const previousUsers: Record<string, SleeperUser[]> = {};
@@ -81,7 +84,10 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       try {
         // For standings, we need the season before the pick season
         // So for a 2024 pick, we need 2023 standings
-        const previousLeagueId = await findPreviousSeasonLeagueId((parseInt(season) + 1).toString());
+        const pickSeason = (parseInt(season) + 1).toString();
+        const previousLeagueId = await findPreviousSeasonLeagueId(pickSeason);
+        console.log('Looking for previous league ID for pick season:', pickSeason, 'found:', previousLeagueId);
+        
         if (previousLeagueId) {
           const [rostersData, usersData] = await Promise.all([
             SleeperAPI.getLeagueRosters(previousLeagueId),
@@ -90,6 +96,8 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
           previousRosters[season] = rostersData;
           previousUsers[season] = usersData;
           console.log(`Loaded ${season} season data:`, { rosters: rostersData.length, users: usersData.length });
+        } else {
+          console.warn(`Could not find league ID for season ${pickSeason} to get ${season} standings`);
         }
       } catch (error) {
         console.warn(`Failed to load data for season ${season}:`, error);
@@ -108,12 +116,18 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       const targetYear = parseInt(season);
       const currentYear = parseInt(league.season);
       
+      console.log('Finding league ID for season:', season, 'current league season:', league.season, 'current league ID:', league.league_id);
+      
       if (targetYear === currentYear) {
         // Same season, use current league
+        console.log('Using current league ID for same season');
         return league.league_id;
       } else if (targetYear === currentYear - 1 && league.previous_league_id) {
         // Previous season, use previous_league_id
+        console.log('Using previous_league_id:', league.previous_league_id);
         return league.previous_league_id;
+      } else {
+        console.log('Cannot find league ID for season:', season, 'target year:', targetYear, 'current year:', currentYear, 'has previous_league_id:', !!league.previous_league_id);
       }
       
       // For other seasons, we'd need to traverse the league history
@@ -142,8 +156,13 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       season: pickSeason,
       round: pick.round,
       original_owner: pick.original_owner,
-      owner_id: pick.owner_id
+      owner_id: pick.owner_id,
+      previous_owner_id: pick.previous_owner_id
     });
+    
+    // Handle the case where original_owner is undefined - use previous_owner_id instead
+    const originalOwnerId = pick.original_owner || pick.previous_owner_id;
+    console.log('Using original owner ID:', originalOwnerId);
     
     // For 2025 picks, we need 2024 standings to determine draft order
     const previousSeason = (parseInt(pickSeason) - 1).toString();
@@ -161,7 +180,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     let inferredPickNumber = '';
     
     // Find the original owner in the current season first
-    const originalRoster = rosters.find(r => r.roster_id === pick.original_owner);
+    const originalRoster = rosters.find(r => r.roster_id === originalOwnerId);
     console.log('Original roster found:', originalRoster?.roster_id);
     
     if (originalRoster) {
@@ -174,8 +193,10 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
         if (previousRosters.length > 0) {
           // Find the same user in the previous season
           const previousUser = previousUsers.find(u => u.user_id === originalUser.user_id);
+          console.log('Previous user found:', !!previousUser, previousUser?.username);
           if (previousUser) {
             const previousRoster = previousRosters.find(r => r.owner_id === previousUser.user_id);
+            console.log('Previous roster found:', !!previousRoster, previousRoster?.roster_id);
             if (previousRoster) {
               // Calculate final rank from previous season
               const finalRank = calculateRankFromRecord(previousRoster, previousRosters);
@@ -191,8 +212,12 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
               });
             }
           }
+        } else {
+          console.log('No previous season roster data available for pick number inference');
         }
       }
+    } else {
+      console.log('Could not find original roster for owner ID:', originalOwnerId);
     }
     
     // Find the draft for this pick's season
