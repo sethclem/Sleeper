@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Calendar, Users, ArrowRight } from 'lucide-react';
+import { Calendar, Users, ArrowRight } from 'lucide-react';
 import { SleeperTrade, SleeperUser, PlayerInfo } from '../types/sleeper';
 
 interface TradeSelectorProps {
@@ -17,8 +17,6 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
   selectedTrades,
   onSelectionChange
 }) => {
-  const [expandedTrades, setExpandedTrades] = useState<Set<string>>(new Set());
-
   const getUserById = (userId: string) => {
     return users.find(user => user.user_id === userId);
   };
@@ -35,16 +33,6 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     });
   };
 
-  const toggleTradeExpansion = (tradeId: string) => {
-    const newExpanded = new Set(expandedTrades);
-    if (newExpanded.has(tradeId)) {
-      newExpanded.delete(tradeId);
-    } else {
-      newExpanded.add(tradeId);
-    }
-    setExpandedTrades(newExpanded);
-  };
-
   const handleTradeToggle = (tradeId: string) => {
     const newSelected = selectedTrades.includes(tradeId)
       ? selectedTrades.filter(id => id !== tradeId)
@@ -53,42 +41,43 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
   };
 
   const getTradeParticipants = (trade: SleeperTrade) => {
-    const participants = new Set<string>();
-    
-    // Add users from adds/drops
-    Object.values(trade.adds || {}).forEach(rosterId => {
-      const user = users.find(u => u.user_id === trade.roster_ids.find(rid => rid === rosterId)?.toString());
-      if (user) participants.add(user.user_id);
-    });
-    
-    // Add creator and consenters
-    participants.add(trade.creator);
-    trade.consenter_ids?.forEach(id => {
-      const user = users.find(u => u.user_id === id.toString());
-      if (user) participants.add(user.user_id);
-    });
-
-    return Array.from(participants).map(userId => getUserById(userId)).filter(Boolean);
+    const participantIds = new Set<string>();
+    participantIds.add(trade.creator);
+    trade.consenter_ids?.forEach(id => participantIds.add(id.toString()));
+    return Array.from(participantIds).map(userId => getUserById(userId)).filter(Boolean);
   };
 
   const getTradeDetails = (trade: SleeperTrade) => {
-    const details: { [userId: string]: { received: string[], gave: string[] } } = {};
+    const details: { [rosterId: string]: { received: string[], gave: string[], userId: string } } = {};
     
     // Process adds (what each team received)
     Object.entries(trade.adds || {}).forEach(([playerId, rosterId]) => {
-      const user = users.find(u => u.user_id === trade.roster_ids.find(rid => rid === rosterId)?.toString());
-      if (user) {
-        if (!details[user.user_id]) details[user.user_id] = { received: [], gave: [] };
-        details[user.user_id].received.push(getPlayerName(playerId));
+      const roster = trade.roster_ids.find(rid => rid === rosterId);
+      if (roster) {
+        const rosterKey = rosterId.toString();
+        if (!details[rosterKey]) {
+          // Find the user for this roster
+          const userId = trade.creator === users.find(u => trade.roster_ids.includes(parseInt(u.user_id)))?.user_id 
+            ? trade.creator 
+            : trade.consenter_ids?.find(id => users.find(u => u.user_id === id.toString()))?.toString() || '';
+          details[rosterKey] = { received: [], gave: [], userId };
+        }
+        details[rosterKey].received.push(getPlayerName(playerId));
       }
     });
 
     // Process drops (what each team gave up)
     Object.entries(trade.drops || {}).forEach(([playerId, rosterId]) => {
-      const user = users.find(u => u.user_id === trade.roster_ids.find(rid => rid === rosterId)?.toString());
-      if (user) {
-        if (!details[user.user_id]) details[user.user_id] = { received: [], gave: [] };
-        details[user.user_id].gave.push(getPlayerName(playerId));
+      const roster = trade.roster_ids.find(rid => rid === rosterId);
+      if (roster) {
+        const rosterKey = rosterId.toString();
+        if (!details[rosterKey]) {
+          const userId = trade.creator === users.find(u => trade.roster_ids.includes(parseInt(u.user_id)))?.user_id 
+            ? trade.creator 
+            : trade.consenter_ids?.find(id => users.find(u => u.user_id === id.toString()))?.toString() || '';
+          details[rosterKey] = { received: [], gave: [], userId };
+        }
+        details[rosterKey].gave.push(getPlayerName(playerId));
       }
     });
 
@@ -99,7 +88,6 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     <div className="space-y-3">
       {trades.map((trade) => {
         const isSelected = selectedTrades.includes(trade.transaction_id);
-        const isExpanded = expandedTrades.has(trade.transaction_id);
         const participants = getTradeParticipants(trade);
         const tradeDetails = getTradeDetails(trade);
         
@@ -134,55 +122,48 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
                     </div>
                   </div>
                 </div>
-                <button
-                  onClick={() => toggleTradeExpansion(trade.transaction_id)}
-                  className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                </button>
               </div>
 
-              {isExpanded && (
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <h4 className="text-sm font-medium text-gray-900 mb-3">Trade Details</h4>
-                  <div className="space-y-3">
-                    {Object.entries(tradeDetails).map(([userId, details]) => {
-                      const user = getUserById(userId);
-                      if (!user) return null;
-                      
-                      return (
-                        <div key={userId} className="bg-gray-50 rounded-lg p-3">
-                          <div className="font-medium text-gray-900 mb-2">
-                            {user.display_name || user.username}
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                            {details.received.length > 0 && (
-                              <div>
-                                <span className="text-green-600 font-medium">Received:</span>
-                                <ul className="mt-1 space-y-1">
-                                  {details.received.map((player, idx) => (
-                                    <li key={idx} className="text-gray-700">• {player}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                            {details.gave.length > 0 && (
-                              <div>
-                                <span className="text-red-600 font-medium">Gave:</span>
-                                <ul className="mt-1 space-y-1">
-                                  {details.gave.map((player, idx) => (
-                                    <li key={idx} className="text-gray-700">• {player}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
+              {/* Always show trade details */}
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Trade Details</h4>
+                <div className="space-y-3">
+                  {Object.entries(tradeDetails).map(([rosterId, details]) => {
+                    const user = getUserById(details.userId);
+                    if (!user) return null;
+                    
+                    return (
+                      <div key={rosterId} className="bg-gray-50 rounded-lg p-3">
+                        <div className="font-medium text-gray-900 mb-2">
+                          {user.display_name || user.username}
                         </div>
-                      );
-                    })}
-                  </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                          {details.received.length > 0 && (
+                            <div>
+                              <span className="text-green-600 font-medium">Received:</span>
+                              <ul className="mt-1 space-y-1">
+                                {details.received.map((player, idx) => (
+                                  <li key={idx} className="text-gray-700">• {player}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {details.gave.length > 0 && (
+                            <div>
+                              <span className="text-red-600 font-medium">Gave:</span>
+                              <ul className="mt-1 space-y-1">
+                                {details.gave.map((player, idx) => (
+                                  <li key={idx} className="text-gray-700">• {player}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
             </div>
           </div>
         );
