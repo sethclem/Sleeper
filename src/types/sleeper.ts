@@ -105,10 +105,32 @@ export interface SleeperTrade {
   roster_ids: number[];
   adds: Record<string, number>;
   drops: Record<string, number>;
-  draft_picks: any[];
+  draft_picks: DraftPick[];
   creator: string;
   consenter_ids: number[];
   week: number;
+}
+
+export interface DraftPick {
+  season: string;
+  round: number;
+  roster_id: number;
+  previous_owner_id: number;
+  owner_id: number;
+}
+
+export interface DraftInfo {
+  draft_id: string;
+  season: string;
+  league_id: string;
+}
+
+export interface DraftPickDetail {
+  pick_no: number;
+  round: number;
+  roster_id: number;
+  player_id: string;
+  picked_by: string;
 }
 
 export interface TradeSimulationResult {

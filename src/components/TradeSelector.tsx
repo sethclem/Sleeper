@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Calendar, Users, ArrowRight } from 'lucide-react';
-import { SleeperTrade, SleeperUser, PlayerInfo } from '../types/sleeper';
+import { SleeperTrade, SleeperUser, SleeperRoster, PlayerInfo, DraftPick, DraftInfo, DraftPickDetail } from '../types/sleeper';
+import { SleeperAPI } from '../services/sleeperApi';
 
 interface TradeSelectorProps {
   trades: SleeperTrade[];
@@ -9,6 +10,7 @@ interface TradeSelectorProps {
   players: Record<string, PlayerInfo>;
   selectedTrades: string[];
   onSelectionChange: (tradeIds: string[]) => void;
+  leagueId: string;
 }
 
 export const TradeSelector: React.FC<TradeSelectorProps> = ({
@@ -17,8 +19,37 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
   rosters,
   players,
   selectedTrades,
-  onSelectionChange
+  onSelectionChange,
+  leagueId
 }) => {
+  const [drafts, setDrafts] = useState<DraftInfo[]>([]);
+  const [draftPicks, setDraftPicks] = useState<Record<string, DraftPickDetail[]>>({});
+  const [draftsLoaded, setDraftsLoaded] = useState(false);
+
+  React.useEffect(() => {
+    loadDraftData();
+  }, [leagueId]);
+
+  const loadDraftData = async () => {
+    if (draftsLoaded) return;
+    
+    try {
+      const draftsData = await SleeperAPI.getLeagueDrafts(leagueId);
+      setDrafts(draftsData);
+      
+      // Load picks for each draft
+      const allPicks: Record<string, DraftPickDetail[]> = {};
+      for (const draft of draftsData) {
+        const picks = await SleeperAPI.getDraftPicks(draft.draft_id);
+        allPicks[draft.draft_id] = picks;
+      }
+      setDraftPicks(allPicks);
+      setDraftsLoaded(true);
+    } catch (error) {
+      console.error('Error loading draft data:', error);
+    }
+  };
+
   const getUserById = (userId: string) => {
     return users.find(user => user.user_id === userId);
   };
@@ -27,6 +58,29 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     const player = players[playerId];
     if (!player) return `Player ${playerId}`;
     return `${player.full_name} (${player.position})`;
+  };
+
+  const formatDraftPick = (pick: DraftPick) => {
+    // Find the draft for this season
+    const draft = drafts.find(d => d.season === pick.season);
+    
+    if (draft && draftPicks[draft.draft_id]) {
+      // Check if this pick has been used (draft completed)
+      const draftPickDetail = draftPicks[draft.draft_id].find(
+        p => p.round === pick.round && p.roster_id === pick.previous_owner_id
+      );
+      
+      if (draftPickDetail && draftPickDetail.player_id) {
+        // Draft completed, show the player selected
+        const playerName = getPlayerName(draftPickDetail.player_id);
+        return `${pick.season} Round ${pick.round} Pick (${playerName})`;
+      }
+    }
+    
+    // Draft not completed or pick not found, show original owner
+    const originalOwner = getUserByRosterId(pick.previous_owner_id);
+    const ownerName = originalOwner?.display_name || originalOwner?.username || `Team ${pick.previous_owner_id}`;
+    return `${pick.season} Round ${pick.round} Pick (from ${ownerName})`;
   };
 
   const formatTradeDate = (timestamp: number) => {
@@ -56,6 +110,8 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       user: SleeperUser;
       received: string[];
       sent: string[];
+      receivedPicks: string[];
+      sentPicks: string[];
     }> = [];
     
     // Process each roster involved in the trade
@@ -67,6 +123,8 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       const sent: string[] = [];
       
       // Find players this roster received (in adds)
+        receivedPicks: [],
+        sentPicks: []
       Object.entries(trade.adds || {}).forEach(([playerId, toRosterId]) => {
         if (toRosterId === rosterId) {
           received.push(getPlayerName(playerId));
@@ -103,6 +161,21 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
               isSelected ? 'border-sleeper-primary bg-sleeper-primary/5' : 'border-gray-200 hover:border-gray-300'
             }`}
           >
+    // Process draft picks
+    (trade.draft_picks || []).forEach(pick => {
+      // Find who received the pick
+      const receiver = tradeDetails.find(d => getUserByRosterId(pick.owner_id)?.user_id === d.user.user_id);
+      if (receiver) {
+        receiver.receivedPicks.push(formatDraftPick(pick));
+      }
+      
+      // Find who sent the pick
+      const sender = tradeDetails.find(d => getUserByRosterId(pick.previous_owner_id)?.user_id === d.user.user_id);
+      if (sender) {
+        sender.sentPicks.push(formatDraftPick(pick));
+      }
+    });
+    
             <div className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
@@ -139,22 +212,28 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
                         {details.user.display_name || details.user.username}
                       </div>
                       <div className="space-y-2 text-sm">
-                        {details.received.length > 0 && (
+                        {(details.received.length > 0 || details.receivedPicks.length > 0) && (
                           <div>
                             <span className="text-green-600 font-medium">Receives:</span>
                             <div className="ml-2 mt-1">
                               {details.received.map((player, idx) => (
                                 <div key={idx} className="text-gray-700">• {player}</div>
                               ))}
+                              {details.receivedPicks.map((pick, idx) => (
+                                <div key={`pick-${idx}`} className="text-gray-700">• {pick}</div>
+                              ))}
                             </div>
                           </div>
                         )}
-                        {details.sent.length > 0 && (
+                        {(details.sent.length > 0 || details.sentPicks.length > 0) && (
                           <div>
                             <span className="text-red-600 font-medium">Sends:</span>
                             <div className="ml-2 mt-1">
                               {details.sent.map((player, idx) => (
                                 <div key={idx} className="text-gray-700">• {player}</div>
+                              ))}
+                              {details.sentPicks.map((pick, idx) => (
+                                <div key={`pick-${idx}`} className="text-gray-700">• {pick}</div>
                               ))}
                             </div>
                           </div>

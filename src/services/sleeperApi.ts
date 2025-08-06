@@ -162,6 +162,28 @@ export class SleeperAPI {
     }
   }
 
+  static async getLeagueDrafts(leagueId: string): Promise<DraftInfo[]> {
+    try {
+      const response = await fetch(`${BASE_URL}/league/${leagueId}/drafts`);
+      if (!response.ok) return [];
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching drafts:', error);
+      return [];
+    }
+  }
+
+  static async getDraftPicks(draftId: string): Promise<DraftPickDetail[]> {
+    try {
+      const response = await fetch(`${BASE_URL}/draft/${draftId}/picks`);
+      if (!response.ok) return [];
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching draft picks:', error);
+      return [];
+    }
+  }
+
   static async getNFLState(): Promise<{ week: number; season: string }> {
     try {
       const response = await fetch(`${BASE_URL}/state/nfl`);
