@@ -145,6 +145,21 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       });
     });
 
+    // Process draft picks
+    (trade.draft_picks || []).forEach(pick => {
+      // Find who received the pick
+      const receiver = tradeDetails.find(d => getUserByRosterId(pick.owner_id)?.user_id === d.user.user_id);
+      if (receiver) {
+        receiver.receivedPicks.push(formatDraftPick(pick));
+      }
+      
+      // Find who sent the pick
+      const sender = tradeDetails.find(d => getUserByRosterId(pick.previous_owner_id)?.user_id === d.user.user_id);
+      if (sender) {
+        sender.sentPicks.push(formatDraftPick(pick));
+      }
+    });
+
     return tradeDetails;
   };
 
@@ -161,21 +176,6 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
               isSelected ? 'border-sleeper-primary bg-sleeper-primary/5' : 'border-gray-200 hover:border-gray-300'
             }`}
           >
-    // Process draft picks
-    (trade.draft_picks || []).forEach(pick => {
-      // Find who received the pick
-      const receiver = tradeDetails.find(d => getUserByRosterId(pick.owner_id)?.user_id === d.user.user_id);
-      if (receiver) {
-        receiver.receivedPicks.push(formatDraftPick(pick));
-      }
-      
-      // Find who sent the pick
-      const sender = tradeDetails.find(d => getUserByRosterId(pick.previous_owner_id)?.user_id === d.user.user_id);
-      if (sender) {
-        sender.sentPicks.push(formatDraftPick(pick));
-      }
-    });
-    
             <div className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
