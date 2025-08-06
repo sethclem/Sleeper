@@ -5,6 +5,7 @@ import { SleeperTrade, SleeperUser, PlayerInfo } from '../types/sleeper';
 interface TradeSelectorProps {
   trades: SleeperTrade[];
   users: SleeperUser[];
+  rosters: SleeperRoster[];
   players: Record<string, PlayerInfo>;
   selectedTrades: string[];
   onSelectionChange: (tradeIds: string[]) => void;
@@ -13,6 +14,7 @@ interface TradeSelectorProps {
 export const TradeSelector: React.FC<TradeSelectorProps> = ({
   trades,
   users,
+  rosters,
   players,
   selectedTrades,
   onSelectionChange
