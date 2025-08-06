@@ -48,35 +48,34 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
   };
 
   const getTradeDetails = (trade: SleeperTrade) => {
-    const details: { [rosterId: string]: { received: string[], gave: string[], userId: string } } = {};
+    const details: { [rosterId: string]: { received: string[], gave: string[], user: SleeperUser | null } } = {};
     
+    // Initialize details for all roster IDs involved in the trade
+    trade.roster_ids.forEach(rosterId => {
+      const rosterKey = rosterId.toString();
+      // Find user by checking if they're the creator or a consenter
+      let user = getUserById(trade.creator);
+      if (!user || !trade.roster_ids.includes(parseInt(user.user_id))) {
+        // Try to find user among consenters
+        const consenterUser = trade.consenter_ids?.map(id => getUserById(id.toString())).find(u => u && trade.roster_ids.includes(parseInt(u.user_id)));
+        if (consenterUser) user = consenterUser;
+      }
+      
+      details[rosterKey] = { received: [], gave: [], user };
+    });
+
     // Process adds (what each team received)
     Object.entries(trade.adds || {}).forEach(([playerId, rosterId]) => {
-      const roster = trade.roster_ids.find(rid => rid === rosterId);
-      if (roster) {
-        const rosterKey = rosterId.toString();
-        if (!details[rosterKey]) {
-          // Find the user for this roster
-          const userId = trade.creator === users.find(u => trade.roster_ids.includes(parseInt(u.user_id)))?.user_id 
-            ? trade.creator 
-            : trade.consenter_ids?.find(id => users.find(u => u.user_id === id.toString()))?.toString() || '';
-          details[rosterKey] = { received: [], gave: [], userId };
-        }
+      const rosterKey = rosterId.toString();
+      if (details[rosterKey]) {
         details[rosterKey].received.push(getPlayerName(playerId));
       }
     });
 
-    // Process drops (what each team gave up)
+    // Process drops (what each team gave up)  
     Object.entries(trade.drops || {}).forEach(([playerId, rosterId]) => {
-      const roster = trade.roster_ids.find(rid => rid === rosterId);
-      if (roster) {
-        const rosterKey = rosterId.toString();
-        if (!details[rosterKey]) {
-          const userId = trade.creator === users.find(u => trade.roster_ids.includes(parseInt(u.user_id)))?.user_id 
-            ? trade.creator 
-            : trade.consenter_ids?.find(id => users.find(u => u.user_id === id.toString()))?.toString() || '';
-          details[rosterKey] = { received: [], gave: [], userId };
-        }
+      const rosterKey = rosterId.toString();
+      if (details[rosterKey]) {
         details[rosterKey].gave.push(getPlayerName(playerId));
       }
     });
@@ -129,13 +128,12 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
                 <h4 className="text-sm font-medium text-gray-900 mb-3">Trade Details</h4>
                 <div className="space-y-3">
                   {Object.entries(tradeDetails).map(([rosterId, details]) => {
-                    const user = getUserById(details.userId);
-                    if (!user) return null;
+                    if (!details.user) return null;
                     
                     return (
                       <div key={rosterId} className="bg-gray-50 rounded-lg p-3">
                         <div className="font-medium text-gray-900 mb-2">
-                          {user.display_name || user.username}
+                          {details.user.display_name || details.user.username}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                           {details.received.length > 0 && (
