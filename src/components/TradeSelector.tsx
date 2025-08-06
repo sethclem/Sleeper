@@ -61,26 +61,25 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
   };
 
   const formatDraftPick = (pick: DraftPick) => {
-    // Find the draft for this season
     const draft = drafts.find(d => d.season === pick.season);
     
     if (draft && draftPicks[draft.draft_id]) {
-      // Check if this pick has been used (draft completed)
+      // Find the actual draft pick by matching season, round, and original owner
       const draftPickDetail = draftPicks[draft.draft_id].find(
-        p => p.round === pick.round && p.roster_id === pick.previous_owner_id
+        p => p.round === pick.round && p.roster_id === pick.original_owner
       );
       
       if (draftPickDetail && draftPickDetail.player_id) {
-        // Draft completed, show the player selected
+        // Draft completed, show the player selected with that pick
         const playerName = getPlayerName(draftPickDetail.player_id);
-        return `${pick.season} Round ${pick.round} Pick (${playerName})`;
+        const roundSuffix = pick.round === 1 ? 'st' : pick.round === 2 ? 'nd' : pick.round === 3 ? 'rd' : 'th';
+        return `${pick.season} ${pick.round}${roundSuffix} Round Pick (${playerName})`;
       }
     }
     
-    // Draft not completed or pick not found, show original owner
-    const originalOwner = getUserByRosterId(pick.previous_owner_id);
-    const ownerName = originalOwner?.display_name || originalOwner?.username || `Team ${pick.previous_owner_id}`;
-    return `${pick.season} Round ${pick.round} Pick (from ${ownerName})`;
+    // Draft not completed or pick not found, show just the pick
+    const roundSuffix = pick.round === 1 ? 'st' : pick.round === 2 ? 'nd' : pick.round === 3 ? 'rd' : 'th';
+    return `${pick.season} ${pick.round}${roundSuffix} Round Pick`;
   };
 
   const formatTradeDate = (timestamp: number) => {
