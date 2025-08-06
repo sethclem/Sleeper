@@ -5,6 +5,7 @@ import { SleeperAPI } from '../services/sleeperApi';
 import { StandingsTable } from './StandingsTable';
 import { MatchupGrid } from './MatchupGrid';
 import { RecentActivity } from './RecentActivity';
+import { TradeSimulator } from './TradeSimulator';
 
 interface DashboardProps {
   league: SleeperLeague;
@@ -19,6 +20,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ league, onBack }) => {
   const [currentWeek, setCurrentWeek] = useState(1);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<LeagueStats | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | 'trades'>('overview');
 
   useEffect(() => {
     loadLeagueData();
@@ -114,58 +116,117 @@ export const Dashboard: React.FC<DashboardProps> = ({ league, onBack }) => {
         </div>
       </div>
 
+      {/* Tab Navigation */}
+      <div className="bg-white border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <nav className="flex space-x-8">
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'overview'
+                  ? 'border-sleeper-primary text-sleeper-primary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Overview
+            </button>
+            <button
+              onClick={() => setActiveTab('trades')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'trades'
+                  ? 'border-sleeper-primary text-sleeper-primary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Trade Simulator
+            </button>
+          </nav>
+        </div>
+      </div>
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards */}
-        {stats && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div className="card p-6">
-              <div className="flex items-center">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Users className="w-6 h-6 text-blue-600" />
+        {activeTab === 'overview' ? (
+          <>
+            {/* Stats Cards */}
+            {stats && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div className="card p-6">
+                  <div className="flex items-center">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Users className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Total Teams</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.totalTeams}</p>
+                    </div>
+                  </div>
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Total Teams</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.totalTeams}</p>
+
+                <div className="card p-6">
+                  <div className="flex items-center">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <TrendingUp className="w-6 h-6 text-green-600" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Avg Score</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.averageScore}</p>
+                    </div>
+                  </div>
                 </div>
+
+                <div className="card p-6">
+                  <div className="flex items-center">
+                    <div className="p-2 bg-yellow-100 rounded-lg">
+                      <Trophy className="w-6 h-6 text-yellow-600" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Top Scorer</p>
+                      <p className="text-lg font-bold text-gray-900">{stats.topScorer}</p>
+                      <p className="text-sm text-gray-500">{stats.highestScore} pts</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="card p-6">
+                  <div className="flex items-center">
+                    <div className="p-2 bg-purple-100 rounded-lg">
+                      <Activity className="w-6 h-6 text-purple-600" />
+                    </div>
+                    <div className="ml-4">
+                      <p className="text-sm font-medium text-gray-600">Transactions</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.totalTransactions}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Main Content Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Standings */}
+              <div className="lg:col-span-2">
+                <StandingsTable rosters={rosters} users={users} />
+              </div>
+
+              {/* Recent Activity */}
+              <div>
+                <RecentActivity transactions={transactions} users={users} />
               </div>
             </div>
 
-            <div className="card p-6">
-              <div className="flex items-center">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <TrendingUp className="w-6 h-6 text-green-600" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Avg Score</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.averageScore}</p>
-                </div>
-              </div>
+            {/* Matchups */}
+            <div className="mt-8">
+              <MatchupGrid matchups={matchups} rosters={rosters} users={users} currentWeek={currentWeek} />
             </div>
+          </>
+        ) : (
+          <TradeSimulator league={league} rosters={rosters} users={users} />
+        )}
+      </div>
+    </div>
+  );
+};
 
-            <div className="card p-6">
-              <div className="flex items-center">
-                <div className="p-2 bg-yellow-100 rounded-lg">
-                  <Trophy className="w-6 h-6 text-yellow-600" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Top Scorer</p>
-                  <p className="text-lg font-bold text-gray-900">{stats.topScorer}</p>
-                  <p className="text-sm text-gray-500">{stats.highestScore} pts</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="card p-6">
-              <div className="flex items-center">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Activity className="w-6 h-6 text-purple-600" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Transactions</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.totalTransactions}</p>
-                </div>
-              </div>
-            </div>
           </div>
         )}
 

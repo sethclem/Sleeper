@@ -89,6 +89,61 @@ export interface SleeperTransaction {
   waiver_budget: any[];
 }
 
+export interface SleeperTrade {
+  transaction_id: string;
+  type: 'trade';
+  status: string;
+  status_updated: number;
+  created: number;
+  roster_ids: number[];
+  adds: Record<string, number>;
+  drops: Record<string, number>;
+  draft_picks: any[];
+  creator: string;
+  consenter_ids: number[];
+  week: number;
+}
+
+export interface TradeSimulationResult {
+  originalStandings: TeamStanding[];
+  simulatedStandings: TeamStanding[];
+  weeklyImpact: WeeklyImpact[];
+  affectedTeams: string[];
+}
+
+export interface TeamStanding {
+  rosterId: number;
+  teamName: string;
+  wins: number;
+  losses: number;
+  ties: number;
+  pointsFor: number;
+  pointsAgainst: number;
+  rank: number;
+}
+
+export interface WeeklyImpact {
+  week: number;
+  teamImpacts: TeamWeeklyImpact[];
+}
+
+export interface TeamWeeklyImpact {
+  rosterId: number;
+  teamName: string;
+  originalPoints: number;
+  simulatedPoints: number;
+  difference: number;
+  originalResult: 'W' | 'L' | 'T';
+  simulatedResult: 'W' | 'L' | 'T';
+}
+
+export interface PlayerInfo {
+  player_id: string;
+  full_name: string;
+  position: string;
+  team: string;
+}
+
 export interface LeagueStats {
   totalTeams: number;
   totalTransactions: number;

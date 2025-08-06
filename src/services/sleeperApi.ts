@@ -1,4 +1,4 @@
-import { SleeperUser, SleeperLeague, SleeperRoster, SleeperMatchup, SleeperTransaction } from '../types/sleeper';
+import { SleeperUser, SleeperLeague, SleeperRoster, SleeperMatchup, SleeperTransaction, SleeperTrade, PlayerInfo } from '../types/sleeper';
 
 const BASE_URL = 'https://api.sleeper.app/v1';
 
@@ -66,6 +66,59 @@ export class SleeperAPI {
     } catch (error) {
       console.error('Error fetching transactions:', error);
       return [];
+    }
+  }
+
+  static async getAllTransactions(leagueId: string): Promise<SleeperTransaction[]> {
+    try {
+      const allTransactions: SleeperTransaction[] = [];
+      // Fetch transactions for all weeks (1-18 for regular season + playoffs)
+      for (let week = 1; week <= 18; week++) {
+        const weekTransactions = await this.getTransactions(leagueId, week);
+        allTransactions.push(...weekTransactions.map(t => ({ ...t, week })));
+      }
+      return allTransactions;
+    } catch (error) {
+      console.error('Error fetching all transactions:', error);
+      return [];
+    }
+  }
+
+  static async getAllTrades(leagueId: string): Promise<SleeperTrade[]> {
+    try {
+      const allTransactions = await this.getAllTransactions(leagueId);
+      return allTransactions.filter(t => t.type === 'trade' && t.status === 'complete') as SleeperTrade[];
+    } catch (error) {
+      console.error('Error fetching trades:', error);
+      return [];
+    }
+  }
+
+  static async getAllMatchups(leagueId: string): Promise<Record<number, SleeperMatchup[]>> {
+    try {
+      const allMatchups: Record<number, SleeperMatchup[]> = {};
+      // Fetch matchups for all weeks
+      for (let week = 1; week <= 18; week++) {
+        const weekMatchups = await this.getMatchups(leagueId, week);
+        if (weekMatchups.length > 0) {
+          allMatchups[week] = weekMatchups;
+        }
+      }
+      return allMatchups;
+    } catch (error) {
+      console.error('Error fetching all matchups:', error);
+      return {};
+    }
+  }
+
+  static async getPlayers(): Promise<Record<string, PlayerInfo>> {
+    try {
+      const response = await fetch(`${BASE_URL}/players/nfl`);
+      if (!response.ok) return {};
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching players:', error);
+      return {};
     }
   }
 
