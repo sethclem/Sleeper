@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Trophy, TrendingUp, Users, Activity } from 'lucide-react';
-import { SleeperLeague, SleeperRoster, SleeperUser, SleeperMatchup, SleeperTransaction, LeagueStats } from '../types/sleeper';
+import { ArrowLeft, Trophy, TrendingUp, Users, Activity, ChevronDown } from 'lucide-react';
+import { ConsolidatedLeague, SleeperLeague, SleeperRoster, SleeperUser, SleeperMatchup, SleeperTransaction, LeagueStats } from '../types/sleeper';
 import { SleeperAPI } from '../services/sleeperApi';
 import { StandingsTable } from './StandingsTable';
 import { MatchupGrid } from './MatchupGrid';
@@ -8,11 +8,13 @@ import { RecentActivity } from './RecentActivity';
 import { TradeSimulator } from './TradeSimulator';
 
 interface DashboardProps {
-  league: SleeperLeague;
+  league: ConsolidatedLeague;
   onBack: () => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ league, onBack }) => {
+  const [selectedSeason, setSelectedSeason] = useState<SleeperLeague>(league.mostRecentSeason);
+  const [seasonDropdownOpen, setSeasonDropdownOpen] = useState(false);
   const [rosters, setRosters] = useState<SleeperRoster[]>([]);
   const [users, setUsers] = useState<SleeperUser[]>([]);
   const [matchups, setMatchups] = useState<SleeperMatchup[]>([]);
@@ -24,14 +26,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ league, onBack }) => {
 
   useEffect(() => {
     loadLeagueData();
-  }, [league.league_id]);
+  }, [selectedSeason.league_id]);
 
   const loadLeagueData = async () => {
     setLoading(true);
     try {
       const [rostersData, usersData, nflState] = await Promise.all([
-        SleeperAPI.getLeagueRosters(league.league_id),
-        SleeperAPI.getLeagueUsers(league.league_id),
+        SleeperAPI.getLeagueRosters(selectedSeason.league_id),
+        SleeperAPI.getLeagueUsers(selectedSeason.league_id),
         SleeperAPI.getNFLState()
       ]);
 
@@ -41,8 +43,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ league, onBack }) => {
 
       // Load current week matchups and recent transactions
       const [matchupsData, transactionsData] = await Promise.all([
-        SleeperAPI.getMatchups(league.league_id, nflState.week),
-        SleeperAPI.getTransactions(league.league_id, nflState.week)
+        SleeperAPI.getMatchups(selectedSeason.league_id, nflState.week),
+        SleeperAPI.getTransactions(selectedSeason.league_id, nflState.week)
       ]);
 
       setMatchups(matchupsData);
@@ -78,6 +80,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ league, onBack }) => {
     });
   };
 
+  const handleSeasonChange = (season: SleeperLeague) => {
+    setSelectedSeason(season);
+    setSeasonDropdownOpen(false);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -104,12 +111,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ league, onBack }) => {
               </button>
               <div>
                 <h1 className="text-xl font-semibold text-gray-900">{league.name}</h1>
-                <p className="text-sm text-gray-500">Week {currentWeek} • {league.season} Season</p>
+                <p className="text-sm text-gray-500">Week {currentWeek} • {selectedSeason.season} Season</p>
               </div>
             </div>
             <div className="flex items-center space-x-4">
+              {/* Season Selector */}
+              <div className="relative">
+                <button
+                  onClick={() => setSeasonDropdownOpen(!seasonDropdownOpen)}
+                  className="flex items-center space-x-2 px-3 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <span className="text-sm font-medium text-gray-700">{selectedSeason.season} Season</span>
+                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                </button>
+                
+                {seasonDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                    <div className="py-1">
+                      {league.seasons.map((season) => (
+                        <button
+                          key={season.league_id}
+                          onClick={() => handleSeasonChange(season)}
+                          className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors ${
+                            selectedSeason.league_id === season.league_id ? 'bg-sleeper-primary/10 text-sleeper-primary' : 'text-gray-700'
+                          }`}
+                        >
+                          {season.season} Season
+                          <span className="text-xs text-gray-500 block">{season.status}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
               <span className="px-3 py-1 bg-sleeper-primary/10 text-sleeper-primary rounded-full text-sm font-medium">
-                {league.status}
+                {selectedSeason.status}
               </span>
             </div>
           </div>
@@ -220,7 +257,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ league, onBack }) => {
             </div>
           </>
         ) : (
-          <TradeSimulator league={league} rosters={rosters} users={users} />
+          <TradeSimulator league={selectedSeason} rosters={rosters} users={users} />
         )}
       </div>
     </div>

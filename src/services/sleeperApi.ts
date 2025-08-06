@@ -1,4 +1,4 @@
-import { SleeperUser, SleeperLeague, SleeperRoster, SleeperMatchup, SleeperTransaction, SleeperTrade, PlayerInfo } from '../types/sleeper';
+import { SleeperUser, SleeperLeague, ConsolidatedLeague, SleeperRoster, SleeperMatchup, SleeperTransaction, SleeperTrade, PlayerInfo } from '../types/sleeper';
 
 const BASE_URL = 'https://api.sleeper.app/v1';
 
@@ -38,6 +38,31 @@ export class SleeperAPI {
       console.error('Error fetching leagues:', error);
       return [];
     }
+  }
+
+  static consolidateLeagues(leagues: SleeperLeague[]): ConsolidatedLeague[] {
+    const leagueMap = new Map<string, SleeperLeague[]>();
+    
+    // Group leagues by name
+    leagues.forEach(league => {
+      if (!leagueMap.has(league.name)) {
+        leagueMap.set(league.name, []);
+      }
+      leagueMap.get(league.name)!.push(league);
+    });
+    
+    // Convert to consolidated format
+    return Array.from(leagueMap.entries()).map(([name, seasons]) => {
+      // Sort seasons by year (most recent first)
+      const sortedSeasons = seasons.sort((a, b) => parseInt(b.season) - parseInt(a.season));
+      
+      return {
+        name,
+        seasons: sortedSeasons,
+        mostRecentSeason: sortedSeasons[0],
+        totalSeasons: seasons.length
+      };
+    });
   }
 
   static async getLeagueRosters(leagueId: string): Promise<SleeperRoster[]> {

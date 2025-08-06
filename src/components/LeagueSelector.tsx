@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
 import { Search, Users, Trophy, Calendar } from 'lucide-react';
 import { SleeperAPI } from '../services/sleeperApi';
-import { SleeperUser, SleeperLeague } from '../types/sleeper';
+import { SleeperUser, SleeperLeague, ConsolidatedLeague } from '../types/sleeper';
 
 interface LeagueSelectorProps {
-  onLeagueSelect: (league: SleeperLeague) => void;
+  onLeagueSelect: (consolidatedLeague: ConsolidatedLeague) => void;
 }
 
 export const LeagueSelector: React.FC<LeagueSelectorProps> = ({ onLeagueSelect }) => {
   const [username, setUsername] = useState('');
   const [user, setUser] = useState<SleeperUser | null>(null);
-  const [leagues, setLeagues] = useState<SleeperLeague[]>([]);
+  const [consolidatedLeagues, setConsolidatedLeagues] = useState<ConsolidatedLeague[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -25,13 +25,15 @@ export const LeagueSelector: React.FC<LeagueSelectorProps> = ({ onLeagueSelect }
       if (!userData) {
         setError('User not found. Please check the username.');
         setUser(null);
-        setLeagues([]);
+        setConsolidatedLeagues([]);
         return;
       }
       
       setUser(userData);
       const userLeagues = await SleeperAPI.getUserLeagues(userData.user_id);
-      setLeagues(userLeagues.filter(league => league.sport === 'nfl'));
+      const nflLeagues = userLeagues.filter(league => league.sport === 'nfl');
+      const consolidated = SleeperAPI.consolidateLeagues(nflLeagues);
+      setConsolidatedLeagues(consolidated);
     } catch (err) {
       setError('Failed to fetch user data. Please try again.');
     } finally {
@@ -107,35 +109,35 @@ export const LeagueSelector: React.FC<LeagueSelectorProps> = ({ onLeagueSelect }
             </div>
           )}
 
-          {leagues.length > 0 && (
+          {consolidatedLeagues.length > 0 && (
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                 <Users className="w-5 h-5 mr-2" />
-                Select a League ({leagues.length} found)
+                Select a League ({consolidatedLeagues.length} found)
               </h3>
               <div className="space-y-3">
-                {leagues.map((league) => (
+                {consolidatedLeagues.map((consolidatedLeague) => (
                   <button
-                    key={league.league_id}
-                    onClick={() => onLeagueSelect(league)}
+                    key={consolidatedLeague.name}
+                    onClick={() => onLeagueSelect(consolidatedLeague)}
                     className="w-full p-4 border border-gray-200 rounded-lg hover:border-sleeper-primary hover:bg-sleeper-primary/5 transition-all text-left group"
                   >
                     <div className="flex items-center justify-between">
                       <div>
                         <h4 className="font-semibold text-gray-900 group-hover:text-sleeper-primary transition-colors">
-                          {league.name}
+                          {consolidatedLeague.name}
                         </h4>
                         <div className="flex items-center text-sm text-gray-600 mt-1 space-x-4">
                           <span className="flex items-center">
                             <Users className="w-4 h-4 mr-1" />
-                            {league.total_rosters} teams
+                            {consolidatedLeague.mostRecentSeason.total_rosters} teams
                           </span>
                           <span className="flex items-center">
                             <Calendar className="w-4 h-4 mr-1" />
-                            {league.season}
+                            {consolidatedLeague.totalSeasons} season{consolidatedLeague.totalSeasons !== 1 ? 's' : ''}
                           </span>
                           <span className="capitalize px-2 py-1 bg-gray-100 rounded text-xs">
-                            {league.status}
+                            {consolidatedLeague.mostRecentSeason.status}
                           </span>
                         </div>
                       </div>
@@ -149,10 +151,10 @@ export const LeagueSelector: React.FC<LeagueSelectorProps> = ({ onLeagueSelect }
             </div>
           )}
 
-          {user && leagues.length === 0 && !loading && (
+          {user && consolidatedLeagues.length === 0 && !loading && (
             <div className="text-center py-8">
               <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-600">No NFL leagues found for the 2024 season.</p>
+              <p className="text-gray-600">No NFL leagues found.</p>
             </div>
           )}
         </div>

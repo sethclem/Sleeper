@@ -32,6 +32,13 @@ export interface SleeperLeague {
   draft_id: string;
 }
 
+export interface ConsolidatedLeague {
+  name: string;
+  seasons: SleeperLeague[];
+  mostRecentSeason: SleeperLeague;
+  totalSeasons: number;
+}
+
 export interface SleeperRoster {
   roster_id: number;
   owner_id: string;
