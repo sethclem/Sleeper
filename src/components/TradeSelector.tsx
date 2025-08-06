@@ -5,7 +5,6 @@ import { SleeperTrade, SleeperUser, PlayerInfo } from '../types/sleeper';
 interface TradeSelectorProps {
   trades: SleeperTrade[];
   users: SleeperUser[];
-  rosters: SleeperRoster[];
   players: Record<string, PlayerInfo>;
   selectedTrades: string[];
   onSelectionChange: (tradeIds: string[]) => void;
@@ -14,7 +13,6 @@ interface TradeSelectorProps {
 export const TradeSelector: React.FC<TradeSelectorProps> = ({
   trades,
   users,
-  rosters,
   players,
   selectedTrades,
   onSelectionChange
@@ -162,46 +160,6 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
                       </div>
                     </div>
                   ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-};
-                    
-                    return (
-                      <div key={rosterId} className="bg-gray-50 rounded-lg p-3">
-                        <div className="font-medium text-gray-900 mb-2">
-                          {details.user.display_name || details.user.username}
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                          {details.received.length > 0 && (
-                            <div>
-                              <span className="text-green-600 font-medium">Received:</span>
-                              <ul className="mt-1 space-y-1">
-                                {details.received.map((player, idx) => (
-                                  <li key={idx} className="text-gray-700">• {player}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          {details.gave.length > 0 && (
-                            <div>
-                              <span className="text-red-600 font-medium">Gave:</span>
-                              <ul className="mt-1 space-y-1">
-                                {details.gave.map((player, idx) => (
-                                  <li key={idx} className="text-gray-700">• {player}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
                 </div>
               </div>
             </div>
