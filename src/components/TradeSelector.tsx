@@ -5,6 +5,7 @@ import { SleeperTrade, SleeperUser, PlayerInfo } from '../types/sleeper';
 interface TradeSelectorProps {
   trades: SleeperTrade[];
   users: SleeperUser[];
+  rosters: SleeperRoster[];
   players: Record<string, PlayerInfo>;
   selectedTrades: string[];
   onSelectionChange: (tradeIds: string[]) => void;
@@ -13,6 +14,7 @@ interface TradeSelectorProps {
 export const TradeSelector: React.FC<TradeSelectorProps> = ({
   trades,
   users,
+  rosters,
   players,
   selectedTrades,
   onSelectionChange
@@ -22,7 +24,9 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
   };
 
   const getPlayerName = (playerId: string) => {
-    return players[playerId]?.full_name || `Player ${playerId}`;
+    const player = players[playerId];
+    if (!player) return `Player ${playerId}`;
+    return `${player.full_name} (${player.position})`;
   };
 
   const formatTradeDate = (timestamp: number) => {
@@ -40,54 +44,56 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     onSelectionChange(newSelected);
   };
 
-  const getTradeParticipants = (trade: SleeperTrade) => {
-    const participantIds = new Set<string>();
-    participantIds.add(trade.creator);
-    trade.consenter_ids?.forEach(id => participantIds.add(id.toString()));
-    return Array.from(participantIds).map(userId => getUserById(userId)).filter(Boolean);
+  const getUserByRosterId = (rosterId: number) => {
+    // Find the roster first, then get the user
+    const roster = rosters.find(r => r.roster_id === rosterId);
+    if (!roster) return null;
+    return users.find(user => user.user_id === roster.owner_id);
   };
 
   const getTradeDetails = (trade: SleeperTrade) => {
-    const details: { [rosterId: string]: { received: string[], gave: string[], user: SleeperUser | null } } = {};
+    const tradeDetails: Array<{
+      user: SleeperUser;
+      received: string[];
+      sent: string[];
+    }> = [];
     
-    // Initialize details for all roster IDs involved in the trade
+    // Process each roster involved in the trade
     trade.roster_ids.forEach(rosterId => {
-      const rosterKey = rosterId.toString();
-      // Find user by checking if they're the creator or a consenter
-      let user = getUserById(trade.creator);
-      if (!user || !trade.roster_ids.includes(parseInt(user.user_id))) {
-        // Try to find user among consenters
-        const consenterUser = trade.consenter_ids?.map(id => getUserById(id.toString())).find(u => u && trade.roster_ids.includes(parseInt(u.user_id)));
-        if (consenterUser) user = consenterUser;
-      }
+      const user = getUserByRosterId(rosterId);
+      if (!user) return;
       
-      details[rosterKey] = { received: [], gave: [], user };
+      const received: string[] = [];
+      const sent: string[] = [];
+      
+      // Find players this roster received (in adds)
+      Object.entries(trade.adds || {}).forEach(([playerId, toRosterId]) => {
+        if (toRosterId === rosterId) {
+          received.push(getPlayerName(playerId));
+        }
+      });
+      
+      // Find players this roster sent (in drops)
+      Object.entries(trade.drops || {}).forEach(([playerId, fromRosterId]) => {
+        if (fromRosterId === rosterId) {
+          sent.push(getPlayerName(playerId));
+        }
+      });
+      
+      tradeDetails.push({
+        user,
+        received,
+        sent
+      });
     });
 
-    // Process adds (what each team received)
-    Object.entries(trade.adds || {}).forEach(([playerId, rosterId]) => {
-      const rosterKey = rosterId.toString();
-      if (details[rosterKey]) {
-        details[rosterKey].received.push(getPlayerName(playerId));
-      }
-    });
-
-    // Process drops (what each team gave up)  
-    Object.entries(trade.drops || {}).forEach(([playerId, rosterId]) => {
-      const rosterKey = rosterId.toString();
-      if (details[rosterKey]) {
-        details[rosterKey].gave.push(getPlayerName(playerId));
-      }
-    });
-
-    return details;
+    return tradeDetails;
   };
 
   return (
     <div className="space-y-3">
       {trades.map((trade) => {
         const isSelected = selectedTrades.includes(trade.transaction_id);
-        const participants = getTradeParticipants(trade);
         const tradeDetails = getTradeDetails(trade);
         
         return (
@@ -116,7 +122,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
                     <div className="flex items-center space-x-2 mt-1">
                       <Users className="w-4 h-4 text-gray-400" />
                       <span className="text-sm text-gray-600">
-                        {participants.map(p => p?.display_name || p?.username).join(' ↔ ')}
+                        {tradeDetails.map(detail => detail.user.display_name || detail.user.username).join(' ↔ ')}
                       </span>
                     </div>
                   </div>
@@ -127,8 +133,44 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
               <div className="mt-4 pt-4 border-t border-gray-200">
                 <h4 className="text-sm font-medium text-gray-900 mb-3">Trade Details</h4>
                 <div className="space-y-3">
-                  {Object.entries(tradeDetails).map(([rosterId, details]) => {
-                    if (!details.user) return null;
+                  {tradeDetails.map((details, index) => (
+                    <div key={index} className="bg-gray-50 rounded-lg p-3">
+                      <div className="font-medium text-gray-900 mb-2">
+                        {details.user.display_name || details.user.username}
+                      </div>
+                      <div className="space-y-2 text-sm">
+                        {details.received.length > 0 && (
+                          <div>
+                            <span className="text-green-600 font-medium">Receives:</span>
+                            <div className="ml-2 mt-1">
+                              {details.received.map((player, idx) => (
+                                <div key={idx} className="text-gray-700">• {player}</div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {details.sent.length > 0 && (
+                          <div>
+                            <span className="text-red-600 font-medium">Sends:</span>
+                            <div className="ml-2 mt-1">
+                              {details.sent.map((player, idx) => (
+                                <div key={idx} className="text-gray-700">• {player}</div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
                     
                     return (
                       <div key={rosterId} className="bg-gray-50 rounded-lg p-3">

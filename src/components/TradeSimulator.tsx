@@ -113,6 +113,7 @@ export const TradeSimulator: React.FC<TradeSimulatorProps> = ({ league, rosters,
               <TradeSelector
                 trades={trades}
                 users={users}
+                rosters={rosters}
                 players={players}
                 selectedTrades={selectedTrades}
                 onSelectionChange={handleTradeSelection}
