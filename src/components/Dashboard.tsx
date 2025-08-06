@@ -220,8 +220,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ league, onBack }) => {
             </div>
           </>
         ) : (
-          <TradeSimulator league={league} rosters={rosters} users={users} />
-        )}
+         )}
+       </div>
+     </div>
+   );
+ };
       </div>
     </div>
   );
