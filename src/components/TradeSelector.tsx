@@ -39,14 +39,18 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     
     try {
       const draftsData = await SleeperAPI.getLeagueDrafts(leagueId);
+      console.log('Raw drafts data:', draftsData);
       setDrafts(draftsData);
       
       // Load picks for each draft
       const allPicks: Record<string, DraftPickDetail[]> = {};
       for (const draft of draftsData) {
+        console.log('Loading picks for draft:', draft.draft_id, 'season:', draft.season);
         const picks = await SleeperAPI.getDraftPicks(draft.draft_id);
+        console.log('Loaded picks for draft:', draft.draft_id, 'count:', picks.length);
         allPicks[draft.draft_id] = picks;
       }
+      console.log('All draft picks loaded:', Object.keys(allPicks));
       setDraftPicks(allPicks);
       
       // Load previous season data for pick inference
@@ -193,6 +197,8 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     
     // Find the draft for this pick's season
     const draft = drafts.find(d => d.season === pickSeason);
+    console.log('Looking for draft in season:', pickSeason);
+    console.log('Available drafts:', drafts.map(d => ({ id: d.draft_id, season: d.season })));
     console.log('Draft found for season:', pickSeason, !!draft);
     
     const roundSuffix = pick.round === 1 ? 'st' : pick.round === 2 ? 'nd' : pick.round === 3 ? 'rd' : 'th';
@@ -200,45 +206,37 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     if (draft && draftPicks[draft.draft_id]) {
       // Draft has occurred, try to find the actual player selected
       const allPicks = draftPicks[draft.draft_id];
-      console.log('Draft picks loaded:', allPicks.length);
+      console.log('Draft picks loaded for', draft.draft_id, ':', allPicks.length);
+      console.log('Sample picks:', allPicks.slice(0, 3));
       
       if (inferredPickNumber) {
         // Calculate the overall pick number
         const [roundStr, pickInRoundStr] = inferredPickNumber.split('.');
         const roundNum = parseInt(roundStr);
         const pickInRound = parseInt(pickInRoundStr);
-        const totalTeams = rosters.length; // Use current season team count for draft
+        const totalTeams = rosters.length;
         const overallPickNumber = ((roundNum - 1) * totalTeams) + pickInRound;
         
-        console.log('Looking for overall pick:', overallPickNumber, 'in round', roundNum);
+        console.log('Calculated overall pick number:', overallPickNumber, 'from', inferredPickNumber);
+        console.log('Available pick numbers:', allPicks.map(p => p.pick_no).slice(0, 10));
         
         // Find the pick by overall pick number
         const draftPickDetail = allPicks.find(p => p.pick_no === overallPickNumber);
-        console.log('Draft pick detail found:', !!draftPickDetail, draftPickDetail?.player_id);
+        console.log('Draft pick detail found:', !!draftPickDetail);
+        if (draftPickDetail) {
+          console.log('Pick detail:', { pick_no: draftPickDetail.pick_no, player_id: draftPickDetail.player_id, round: draftPickDetail.round });
+        }
         
         if (draftPickDetail && draftPickDetail.player_id) {
           const playerName = getPlayerName(draftPickDetail.player_id);
-          console.log('Player name:', playerName);
+          console.log('Final player name for pick', overallPickNumber, ':', playerName);
           return `${pickSeason} ${pick.round}${roundSuffix} Round Pick (${inferredPickNumber} - ${playerName})`;
         }
+      } else {
+        console.log('No inferred pick number available for', pickSeason, pick.round, 'round pick');
       }
-      
-      // If we can't infer the exact pick, try to find by round and original owner
-      // This is a fallback for when we don't have previous season data
-      const roundPicks = allPicks.filter(p => {
-        const pickRound = Math.ceil(p.pick_no / rosters.length);
-        return pickRound === pick.round;
-      });
-      
-      console.log(`Round ${pick.round} picks:`, roundPicks.length);
-      
-      // Draft occurred but couldn't find the specific pick, show with inferred number
-      if (inferredPickNumber) {
-        return `${pickSeason} ${pick.round}${roundSuffix} Round Pick (${inferredPickNumber})`;
-      }
-      
-      // Draft occurred but no inferred number available
-      return `${pickSeason} ${pick.round}${roundSuffix} Round Pick`;
+    } else {
+      console.log('No draft data available for season:', pickSeason, 'draft found:', !!draft, 'picks loaded:', draft ? !!draftPicks[draft.draft_id] : false);
     }
     
     // Draft hasn't occurred yet
