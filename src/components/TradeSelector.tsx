@@ -123,8 +123,6 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       const sent: string[] = [];
       
       // Find players this roster received (in adds)
-        receivedPicks: [],
-        sentPicks: []
       Object.entries(trade.adds || {}).forEach(([playerId, toRosterId]) => {
         if (toRosterId === rosterId) {
           received.push(getPlayerName(playerId));
@@ -141,7 +139,9 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       tradeDetails.push({
         user,
         received,
-        sent
+        sent,
+        receivedPicks: [],
+        sentPicks: []
       });
     });
 
