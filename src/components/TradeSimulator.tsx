@@ -118,6 +118,7 @@ export const TradeSimulator: React.FC<TradeSimulatorProps> = ({ league, rosters,
                 selectedTrades={selectedTrades}
                 onSelectionChange={handleTradeSelection}
                 leagueId={league.league_id}
+                league={league}
               />
               
               <div className="flex items-center justify-between mt-6 pt-6 border-t border-gray-200">
