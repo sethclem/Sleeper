@@ -232,20 +232,6 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       
       console.log(`Round ${pick.round} picks:`, roundPicks.length);
       
-      // For now, if we know it's Jaylin Noel, let's see if we can find him
-      const jaylinPick = allPicks.find(p => {
-        const player = players[p.player_id];
-        return player && player.full_name && player.full_name.includes('Jaylin Noel');
-      });
-      
-      if (jaylinPick) {
-        const roundNum = Math.ceil(jaylinPick.pick_no / rosters.length);
-        const pickInRound = ((jaylinPick.pick_no - 1) % rosters.length) + 1;
-        const pickNumber = `${roundNum}.${pickInRound.toString().padStart(2, '0')}`;
-        console.log('Found Jaylin Noel at pick:', pickNumber);
-        return `${pickSeason} ${roundNum}${roundNum === 1 ? 'st' : roundNum === 2 ? 'nd' : roundNum === 3 ? 'rd' : 'th'} Round Pick (${pickNumber} - Jaylin Noel)`;
-      }
-      
       // Draft occurred but couldn't find the specific pick, show with inferred number
       if (inferredPickNumber) {
         return `${pickSeason} ${pick.round}${roundSuffix} Round Pick (${inferredPickNumber})`;
@@ -265,6 +251,8 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
   };
   
   const calculateRankFromRecord = (roster: SleeperRoster, allRosters: SleeperRoster[]): number => {
+    console.log('Calculating rank for roster:', roster.roster_id, 'wins:', roster.settings.wins, 'points:', roster.settings.fpts);
+    
     // Sort rosters by wins (desc), then by points for (desc)
     const sortedRosters = [...allRosters].sort((a, b) => {
       const aWins = a.settings.wins || 0;
@@ -276,7 +264,9 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       return bPoints - aPoints;
     });
     
-    return sortedRosters.findIndex(r => r.roster_id === roster.roster_id) + 1;
+    const rank = sortedRosters.findIndex(r => r.roster_id === roster.roster_id) + 1;
+    console.log('Final rank:', rank, 'out of', allRosters.length, 'teams');
+    return rank;
   };
 
   const formatTradeDate = (timestamp: number) => {
