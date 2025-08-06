@@ -16,9 +16,24 @@ export class SleeperAPI {
 
   static async getUserLeagues(userId: string, season: string = '2024'): Promise<SleeperLeague[]> {
     try {
-      const response = await fetch(`${BASE_URL}/user/${userId}/leagues/nfl/${season}`);
-      if (!response.ok) return [];
-      return await response.json();
+      const allLeagues: SleeperLeague[] = [];
+      const currentYear = new Date().getFullYear();
+      
+      // Fetch leagues from 2018 (when Sleeper started) to current year
+      for (let year = 2018; year <= currentYear; year++) {
+        try {
+          const response = await fetch(`${BASE_URL}/user/${userId}/leagues/nfl/${year}`);
+          if (response.ok) {
+            const yearLeagues = await response.json();
+            allLeagues.push(...yearLeagues);
+          }
+        } catch (error) {
+          console.warn(`Failed to fetch leagues for ${year}:`, error);
+          // Continue with other years even if one fails
+        }
+      }
+      
+      return allLeagues;
     } catch (error) {
       console.error('Error fetching leagues:', error);
       return [];
