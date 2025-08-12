@@ -240,11 +240,12 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       const draft = pickSeasonData.drafts[0]; // Assume first draft is the main draft
       const draftPicksForSeason = pickSeasonData.draftPicks[draft.draft_id] || [];
       
-      console.log(`Draft data for ${pickSeason}:`, {
+      console.log(`🏈 Draft data for ${pickSeason}:`, {
         draftId: draft.draft_id,
         totalPicks: draftPicksForSeason.length,
         inferredPickNumber,
-        samplePickNumbers: draftPicksForSeason.slice(0, 5).map(p => p.pick_no)
+        samplePickNumbers: draftPicksForSeason.slice(0, 10).map(p => ({ pick_no: p.pick_no, round: p.round, player_id: p.player_id })),
+        allPickNumbers: draftPicksForSeason.map(p => p.pick_no).sort((a, b) => a - b)
       });
       
       if (draftPicksForSeason.length > 0) {
@@ -252,26 +253,42 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
         const [roundStr, pickInRoundStr] = inferredPickNumber.split('.');
         const roundNum = parseInt(roundStr);
         const pickInRound = parseInt(pickInRoundStr);
-        const totalTeams = standingsData.rosters.length; // Use standings season for team count
+        
+        // For past seasons, use the pick season's roster count, for future seasons use standings season
+        const totalTeams = pickSeasonData.rosters.length > 0 ? pickSeasonData.rosters.length : standingsData.rosters.length;
         const overallPickNumber = ((roundNum - 1) * totalTeams) + pickInRound;
         
-        console.log('Looking for overall pick number:', {
+        console.log('🎯 Looking for overall pick number:', {
           overallPickNumber,
           calculation: `((${roundNum} - 1) * ${totalTeams}) + ${pickInRound}`,
-          availablePickNumbers: draftPicksForSeason.map(p => p.pick_no).sort((a, b) => a - b).slice(0, 10)
+          totalTeams,
+          roundNum,
+          pickInRound,
+          availablePickNumbers: draftPicksForSeason.map(p => p.pick_no).sort((a, b) => a - b).slice(0, 15)
         });
         
         // Find the pick by overall pick number
         const selectedPick = draftPicksForSeason.find(p => p.pick_no === overallPickNumber);
-        console.log(`Found pick for ${overallPickNumber}:`, {
+        console.log(`🔍 Found pick for ${overallPickNumber}:`, {
           found: !!selectedPick,
           playerId: selectedPick?.player_id,
-          pickNo: selectedPick?.pick_no
+          pickNo: selectedPick?.pick_no,
+          round: selectedPick?.round,
+          fullPick: selectedPick
         });
         
         if (selectedPick && selectedPick.player_id) {
           selectedPlayer = getPlayerName(selectedPick.player_id);
-          console.log(`Selected player for pick ${overallPickNumber}: ${selectedPlayer}`);
+          console.log(`✅ Selected player for pick ${overallPickNumber}: ${selectedPlayer}`);
+        } else if (selectedPick) {
+          console.log(`❌ Pick found but no player_id:`, selectedPick);
+        } else {
+          console.log(`❌ No pick found for overall pick number ${overallPickNumber}`);
+          console.log(`Available picks around that range:`, 
+            draftPicksForSeason
+              .filter(p => Math.abs(p.pick_no - overallPickNumber) <= 3)
+              .map(p => ({ pick_no: p.pick_no, round: p.round, player_id: p.player_id }))
+          );
         }
       }
     }
