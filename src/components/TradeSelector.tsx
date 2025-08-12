@@ -43,151 +43,58 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     if (dataLoaded) return;
     
     try {
-      console.log('🚀 Loading multi-season data for trades...');
+      console.log('🚀 Loading ALL seasons data for unified access...');
       
-      // Build season to league ID mapping
-      const seasonMapping = buildSeasonToLeagueIdMapping();
-      setSeasonToLeagueId(seasonMapping);
+      // Load data for ALL seasons in the league
+      const allSeasonsData: Record<string, any> = {};
       
-      // Identify all seasons needed for trades
-      const seasonsNeeded = identifySeasonsNeededForTrades();
-      console.log('📅 Seasons needed:', Array.from(seasonsNeeded).sort());
+      for (const season of league.seasons) {
+        console.log(`📅 Loading season ${season.season} (League ID: ${season.league_id})`);
+        
+        try {
+          const [rostersData, usersData, draftsData] = await Promise.all([
+            SleeperAPI.getLeagueRosters(season.league_id),
+            SleeperAPI.getLeagueUsers(season.league_id),
+            SleeperAPI.getLeagueDrafts(season.league_id)
+          ]);
+          
+          // Load draft picks for all drafts in this season
+          const seasonDraftPicks: Record<string, DraftPickDetail[]> = {};
+          for (const draft of draftsData) {
+            try {
+              const picks = await SleeperAPI.getDraftPicks(draft.draft_id);
+              seasonDraftPicks[draft.draft_id] = picks;
+            } catch (error) {
+              console.warn(`⚠️ Failed to load picks for draft ${draft.draft_id}:`, error);
+              seasonDraftPicks[draft.draft_id] = [];
+            }
+          }
+          
+          allSeasonsData[season.season] = {
+            rosters: rostersData,
+            users: usersData,
+            drafts: draftsData,
+            draftPicks: seasonDraftPicks,
+            leagueId: season.league_id,
+            seasonComplete: true // All past seasons are complete
+          };
+          
+          const totalPicks = Object.values(seasonDraftPicks).reduce((sum, picks) => sum + picks.length, 0);
+          console.log(`✅ ${season.season}: ${rostersData.length} teams, ${draftsData.length} drafts, ${totalPicks} picks`);
+          
+        } catch (error) {
+          console.error(`❌ Failed to load season ${season.season}:`, error);
+        }
+      }
       
-      // Load data for each season
-      const multiSeasonDataMap = await loadDataForSeasons(seasonsNeeded, seasonMapping);
-      setMultiSeasonData(multiSeasonDataMap);
+      setMultiSeasonData(allSeasonsData);
       
       setDataLoaded(true);
-      console.log('✅ Multi-season data loading complete');
+      console.log('✅ All seasons data loading complete');
+      console.log('📊 Available seasons:', Object.keys(allSeasonsData).sort());
     } catch (error) {
-      console.error('❌ Error loading multi-season data:', error);
+      console.error('❌ Error loading all seasons data:', error);
     }
-  };
-
-  const buildSeasonToLeagueIdMapping = (): Record<string, string> => {
-    const mapping: Record<string, string> = {};
-    
-    // Map each season to its league ID
-    league.seasons.forEach(season => {
-      mapping[season.season] = season.league_id;
-    });
-    
-    // For seasons not in our league history, try to infer
-    const currentYear = new Date().getFullYear();
-    const mostRecentSeason = league.mostRecentSeason;
-    
-    // For future seasons, use the most recent league ID
-    for (let year = parseInt(mostRecentSeason.season) + 1; year <= currentYear + 5; year++) {
-      if (!mapping[year.toString()]) {
-        mapping[year.toString()] = mostRecentSeason.league_id;
-      }
-    }
-    
-    // For past seasons, try to use previous_league_id chain
-    league.seasons.forEach(season => {
-      if (season.previous_league_id) {
-        const previousYear = (parseInt(season.season) - 1).toString();
-        if (!mapping[previousYear] && parseInt(previousYear) >= 2018) {
-          mapping[previousYear] = season.previous_league_id;
-        }
-      }
-    });
-    
-    return mapping;
-  };
-  
-  const identifySeasonsNeededForTrades = (): Set<string> => {
-    const seasonsNeeded = new Set<string>();
-    
-    trades.forEach(trade => {
-      (trade.draft_picks || []).forEach(pick => {
-        // Need the pick's season for draft results
-        seasonsNeeded.add(pick.season);
-        
-        // Need the previous season for standings (draft order)
-        const previousSeason = (parseInt(pick.season) - 1).toString();
-        if (parseInt(previousSeason) >= 2018) {
-          seasonsNeeded.add(previousSeason);
-        }
-      });
-    });
-    
-    return seasonsNeeded;
-  };
-  
-  const loadDataForSeasons = async (
-    seasonsNeeded: Set<string>, 
-    seasonMapping: Record<string, string>
-  ): Promise<Record<string, {
-    rosters: SleeperRoster[];
-    users: SleeperUser[];
-    drafts: DraftInfo[];
-    draftPicks: Record<string, DraftPickDetail[]>;
-    leagueId: string;
-    seasonComplete: boolean;
-  }>> => {
-    const dataMap: Record<string, any> = {};
-    const currentYear = new Date().getFullYear();
-    
-    for (const season of seasonsNeeded) {
-      const leagueIdForSeason = seasonMapping[season];
-      if (!leagueIdForSeason) {
-        console.warn(`❌ No league ID found for season ${season}`);
-        continue;
-      }
-      
-      try {
-        console.log(`📅 Loading season ${season} (League ID: ${leagueIdForSeason})`);
-        
-        const [rostersData, usersData, draftsData] = await Promise.all([
-          SleeperAPI.getLeagueRosters(leagueIdForSeason),
-          SleeperAPI.getLeagueUsers(leagueIdForSeason),
-          SleeperAPI.getLeagueDrafts(leagueIdForSeason)
-        ]);
-        
-        // Load draft picks for all drafts in this season
-        const seasonDraftPicks: Record<string, DraftPickDetail[]> = {};
-        for (const draft of draftsData) {
-          try {
-            const picks = await SleeperAPI.getDraftPicks(draft.draft_id);
-            seasonDraftPicks[draft.draft_id] = picks;
-          } catch (error) {
-            console.warn(`⚠️ Failed to load picks for draft ${draft.draft_id}:`, error);
-            seasonDraftPicks[draft.draft_id] = [];
-          }
-        }
-        
-        // Determine if season is complete
-        const seasonYear = parseInt(season);
-        const seasonComplete = seasonYear < currentYear || 
-          (seasonYear === currentYear && isSeasonComplete(season));
-        
-        dataMap[season] = {
-          rosters: rostersData,
-          users: usersData,
-          drafts: draftsData,
-          draftPicks: seasonDraftPicks,
-          leagueId: leagueIdForSeason,
-          seasonComplete
-        };
-        
-        const totalPicks = Object.values(seasonDraftPicks).reduce((sum, picks) => sum + picks.length, 0);
-        console.log(`✅ ${season}: ${rostersData.length} teams, ${draftsData.length} drafts, ${totalPicks} picks, complete: ${seasonComplete}`);
-        
-      } catch (error) {
-        console.error(`❌ Failed to load season ${season}:`, error);
-      }
-    }
-    
-    return dataMap;
-  };
-  
-  const isSeasonComplete = (season: string): boolean => {
-    // This is a simplified check - in reality you'd check if playoffs are done
-    // For now, assume current season is not complete unless it's past seasons
-    const currentYear = new Date().getFullYear();
-    const seasonYear = parseInt(season);
-    return seasonYear < currentYear;
   };
 
   const getUserById = (userId: string) => {
@@ -201,17 +108,17 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
   };
 
   const formatDraftPick = (pick: DraftPick) => {
-    console.log(`\n🎯 Formatting ${pick.season} Round ${pick.round} pick`);
+    console.log(`\n🎯 Formatting ${pick.season} Round ${pick.round} pick from unified data`);
     
     const currentYear = new Date().getFullYear();
     const pickYear = parseInt(pick.season);
     const standingsYear = (pickYear - 1).toString();
     
-    // Get data for both seasons - CRITICAL: Use pick.season for draft data
+    // Get data from unified structure
     const pickSeasonData = multiSeasonData[pick.season];  // This should have 2025 draft data
     const standingsSeasonData = multiSeasonData[standingsYear];
     
-    console.log(`📊 Pick season (${pick.season}): ${!!pickSeasonData}, Standings season (${standingsYear}): ${!!standingsSeasonData}`);
+    console.log(`📊 Unified data - Pick season (${pick.season}): ${!!pickSeasonData}, Standings season (${standingsYear}): ${!!standingsSeasonData}`);
     
     if (pickSeasonData) {
       console.log(`📊 Pick season data for ${pick.season}:`, {
@@ -223,7 +130,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     
     // Determine season status
     const isPastOrCurrentSeason = pickYear <= currentYear;
-    const standingsSeasonComplete = standingsSeasonData?.seasonComplete || false;
+    const standingsSeasonComplete = !!standingsSeasonData; // If we have the data, it's complete
     
     // Base format
     const roundSuffix = pick.round === 1 ? 'st' : pick.round === 2 ? 'nd' : pick.round === 3 ? 'rd' : 'th';
@@ -231,7 +138,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     
     // If we don't have standings data or season isn't complete, return basic format
     if (!standingsSeasonData || !standingsSeasonComplete) {
-      console.log(`⏸️ Standings season ${standingsYear} not complete or no data available`);
+      console.log(`⏸️ Standings season ${standingsYear} not available in unified data`);
       return result;
     }
     
@@ -244,7 +151,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     
     // For past/current seasons, try to find the drafted player
     if (isPastOrCurrentSeason && pickSeasonData) {
-      const draftedPlayer = findDraftedPlayerFromExactSeason(pick, pickSeasonData);
+      const draftedPlayer = findDraftedPlayerFromUnifiedData(pick, pickSeasonData);
       if (draftedPlayer) {
         result += ` (${draftedPlayer})`;
         console.log(`👤 Drafted player found: ${draftedPlayer}`);
@@ -294,12 +201,82 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     return rank;
   };
   
-  const findDraftedPlayerFromExactSeason = (pick: DraftPick, pickSeasonData: any): string | null => {
+  const findDraftedPlayerFromUnifiedData = (pick: DraftPick, draftSlot: string | null): string | null => {
+    const pickYear = parseInt(pick.season);
+    const currentYear = new Date().getFullYear();
+    
+    // Don't show players for future drafts
+    if (pickYear > currentYear) {
+      console.log(`🚫 ${pickYear} is future, no player available`);
+      return null;
+    }
+    
+    // Get drafts for the pick's season
+    const seasonDrafts = unifiedLeagueData.allDrafts[pick.season];
+    if (!seasonDrafts || !seasonDrafts.length) {
+      console.log(`❌ No drafts found for ${pick.season}`);
+      return null;
+    }
+    
+    // Use the first draft (main draft)
+    const draft = seasonDrafts[0];
+    if (draft.season !== pick.season) {
+      console.log(`🚫 Draft season mismatch: expected ${pick.season}, got ${draft.season}`);
+      return null;
+    }
+    
+    // Get draft picks for this draft
+    const draftPicks = unifiedLeagueData.allDraftPicks[draft.draft_id] || [];
+    if (!draftPicks.length) {
+      console.log(`❌ No picks found for draft ${draft.draft_id}`);
+      return null;
+    }
+    
+    console.log(`🎯 Searching ${draftPicks.length} picks in ${pick.season} draft`);
+
+    // Try to find by slot if we have it
+    if (draftSlot) {
+      const [roundStr, slotStr] = draftSlot.split('.');
+      const targetRound = parseInt(roundStr);
+      const targetSlot = parseInt(slotStr);
+      
+      const totalTeams = pickSeasonData.rosters?.length || 12;
+      const targetPickNumber = (targetRound - 1) * totalTeams + targetSlot;
+      
+      const foundPick = draftPicks.find(p => p.pick_no === targetPickNumber);
+      if (foundPick && foundPick.player_id) {
+        const playerName = getPlayerName(foundPick.player_id);
+        console.log(`✅ Found by slot: ${playerName}`);
+        return playerName;
+      }
+    }
+    
+    // Fallback: find by owner and round
+    const originalOwnerId = pick.owner_id || pick.previous_owner_id || pick.roster_id;
+    if (originalOwnerId) {
+      const totalTeams = pickSeasonData.rosters?.length || 12;
+      const ownerPicksInRound = draftPicks.filter(p => 
+        p.roster_id === originalOwnerId && 
+        Math.ceil(p.pick_no / totalTeams) === pick.round
+      );
+      
+      if (ownerPicksInRound.length > 0 && ownerPicksInRound[0].player_id) {
+        const playerName = getPlayerName(ownerPicksInRound[0].player_id);
+        console.log(`✅ Found by owner+round: ${playerName}`);
+        return playerName;
+      }
+    }
+    
+    console.log(`❌ No player found for ${pick.season} R${pick.round}`);
+    return null;
+  };
+  
+  const findDraftedPlayerFromUnifiedData = (pick: DraftPick, pickSeasonData: any): string | null => {
     // CRITICAL: Only look for players in the EXACT same year as the pick
     const pickYear = parseInt(pick.season);
     const currentYear = new Date().getFullYear();
     
-    console.log(`🔍 Searching for player in ${pick.season} draft only`);
+    console.log(`🔍 Searching for player in ${pick.season} draft`);
     
     // If this is a future draft, absolutely no player should be shown
     if (pickYear > currentYear) {
