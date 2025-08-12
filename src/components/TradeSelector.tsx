@@ -59,9 +59,10 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       (trade.draft_picks || []).forEach(pick => {
         seasonsNeeded.add(pick.season);
         // For draft order calculation, we need the previous season's standings
-        if (parseInt(pick.season) > 2018) { // Only if there's a valid previous season
-          const previousSeason = (parseInt(pick.season) - 1).toString();
+        const previousSeason = (parseInt(pick.season) - 1).toString();
+        if (parseInt(previousSeason) >= 2018) { // Only if there's a valid previous season
           seasonsNeeded.add(previousSeason);
+          console.log(`Adding previous season ${previousSeason} for ${pick.season} draft order calculation`);
         }
       });
     });
@@ -112,7 +113,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
           console.warn(`Could not find league ID for season ${season}`);
         }
       } catch (error) {
-        console.warn(`Failed to load data for season ${season}:`, error);
+        console.error(`Failed to load data for season ${season}:`, error);
       }
     }
     
@@ -130,14 +131,22 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
         return targetSeason.league_id;
       }
       
-      // For seasons not in consolidated league, try to traverse the league chain
-      const currentYear = parseInt(currentSeason);
+      // For seasons not in consolidated league, try to traverse the league chain  
+      const currentYear = parseInt(league.mostRecentSeason.season);
       const targetYear = parseInt(season);
       
       // For adjacent seasons, try using previous_league_id
       if (targetYear === currentYear - 1 && league.mostRecentSeason.previous_league_id) {
         console.log(`Using previous_league_id for ${season}:`, league.mostRecentSeason.previous_league_id);
         return league.mostRecentSeason.previous_league_id;
+      }
+      
+      // Try to find by traversing the league chain
+      for (const leagueSeason of league.seasons) {
+        if (parseInt(leagueSeason.season) === targetYear + 1 && leagueSeason.previous_league_id) {
+          console.log(`Found ${season} via previous_league_id from ${leagueSeason.season}:`, leagueSeason.previous_league_id);
+          return leagueSeason.previous_league_id;
+        }
       }
       
       console.warn(`Could not find league ID for season ${season}`);
