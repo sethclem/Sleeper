@@ -83,17 +83,14 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
           const [rostersData, usersData, draftsData] = await Promise.all([
             SleeperAPI.getLeagueRosters(leagueIdForSeason),
             SleeperAPI.getLeagueUsers(leagueIdForSeason),
-          const selectedPick = draftPicks.find(p => p.pick_no === overallPickNumber);
-          console.log(`Found pick:`, selectedPick);
+            SleeperAPI.getLeagueDrafts(leagueIdForSeason)
+          ]);
           
-          if (selectedPick && selectedPick.player_id) {
-            const selectedPlayer = getPlayerName(selectedPick.player_id);
           // Load draft picks for this season
           const seasonDraftPicks: Record<string, DraftPickDetail[]> = {};
           for (const draft of draftsData) {
             const picks = await SleeperAPI.getDraftPicks(draft.draft_id);
-            console.log(`No player found for pick ${overallPickNumber}, selectedPick:`, selectedPick);
-            console.log(`Available pick numbers:`, draftPicks.map(p => p.pick_no).sort((a, b) => a - b));
+            seasonDraftPicks[draft.draft_id] = picks;
           }
           
           crossSeasonDataMap[season] = {
@@ -246,10 +243,14 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
         console.log('Looking for overall pick number:', overallPickNumber);
         
         // Find the pick by overall pick number
-        const draftPickDetail = draftPicksForSeason.find(p => p.pick_no === overallPickNumber);
-        if (draftPickDetail && draftPickDetail.player_id) {
-          selectedPlayer = getPlayerName(draftPickDetail.player_id);
-          console.log('Found selected player:', selectedPlayer, 'for pick', overallPickNumber);
+        const selectedPick = draftPicksForSeason.find(p => p.pick_no === overallPickNumber);
+        console.log(`Found pick:`, selectedPick);
+        
+        if (selectedPick && selectedPick.player_id) {
+          selectedPlayer = getPlayerName(selectedPick.player_id);
+        } else {
+          console.log(`No player found for pick ${overallPickNumber}, selectedPick:`, selectedPick);
+          console.log(`Available pick numbers:`, draftPicksForSeason.map(p => p.pick_no).sort((a, b) => a - b));
         }
       }
     }
