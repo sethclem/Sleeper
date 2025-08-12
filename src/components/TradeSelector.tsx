@@ -331,19 +331,18 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     
     console.log(`🎯 Searching ${draftPicks.length} picks from ${pick.season} draft`);
     
-    // Method 1: Find by original owner and round in the EXACT season
     const originalOwnerId = pick.owner_id || pick.previous_owner_id || pick.roster_id;
     console.log(`🔍 Looking for owner ${originalOwnerId} in round ${pick.round}`);
     
     if (originalOwnerId) {
       const ownerPicksInRound = draftPicks.filter(p => 
         p.roster_id === originalOwnerId && 
-        p.round === pick.round
+        Math.ceil(p.pick_no / pickSeasonData.rosters.length) === pick.round
       );
       
       if (ownerPicksInRound.length > 0 && ownerPicksInRound[0].player_id) {
         const playerName = getPlayerName(ownerPicksInRound[0].player_id);
-        console.log(`✅ Found player: ${playerName}`);
+        console.log(`✅ Found player: ${playerName} (Pick ${ownerPicksInRound[0].pick_no})`);
         return playerName;
       }
     }
