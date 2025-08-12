@@ -213,24 +213,34 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     
     console.log(`📊 Pick season (${pick.season}): ${!!pickSeasonData}, Standings season (${standingsYear}): ${!!standingsSeasonData}`);
     
+    // Determine season status
+    const isPastOrCurrentSeason = pickYear <= currentYear;
+    const standingsSeasonComplete = standingsSeasonData?.seasonComplete || false;
+    
     // Base format
     const roundSuffix = pick.round === 1 ? 'st' : pick.round === 2 ? 'nd' : pick.round === 3 ? 'rd' : 'th';
     let result = `${pick.season} ${pick.round}${roundSuffix} Round Pick`;
     
-    // Add draft slot if we have standings data and season is complete
-    if (standingsSeasonData?.seasonComplete) {
-      const draftSlot = calculateDraftSlot(pick, standingsSeasonData);
-      if (draftSlot) {
-        result += ` ${draftSlot}`;
-        console.log(`📍 Draft slot calculated: ${draftSlot}`);
-      }
+    // If we don't have standings data or season isn't complete, return basic format
+    if (!standingsSeasonData || !standingsSeasonComplete) {
+      console.log(`⏸️ Standings season ${standingsYear} not complete or no data available`);
+      return result;
     }
     
-    // Try to find drafted player ONLY from the exact pick season
-    const draftedPlayer = findDraftedPlayerFromExactSeason(pick, pickSeasonData);
-    if (draftedPlayer) {
-      result += ` (${draftedPlayer})`;
-      console.log(`👤 Drafted player found: ${draftedPlayer}`);
+    // Calculate draft slot from standings
+    const draftSlot = calculateDraftSlot(pick, standingsSeasonData);
+    if (draftSlot) {
+      result += ` ${draftSlot}`;
+      console.log(`📍 Draft slot calculated: ${draftSlot}`);
+    }
+    
+    // For past/current seasons, try to find the drafted player
+    if (isPastOrCurrentSeason && pickSeasonData) {
+      const draftedPlayer = findDraftedPlayer(pick, pickSeasonData, draftSlot);
+      if (draftedPlayer) {
+        result += ` (${draftedPlayer})`;
+        console.log(`👤 Drafted player found: ${draftedPlayer}`);
+      }
     }
     
     console.log(`✅ Final format: ${result}`);
@@ -307,6 +317,8 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       return null;
     }
     
+    console.log(`🎯 Looking for player in ${pick.season} draft (${draftPicks.length} picks available)`);
+
     // Try to find by slot if we have it
     if (draftSlot) {
       const [roundStr, slotStr] = draftSlot.split('.');
