@@ -64,6 +64,9 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       });
     });
     
+    // Always include current season as fallback
+    seasonsNeeded.add(league.mostRecentSeason.season);
+    
     console.log('Seasons needed for cross-season analysis:', Array.from(seasonsNeeded));
     
     const crossSeasonDataMap: Record<string, {
@@ -132,15 +135,22 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
         return league.mostRecentSeason.league_id;
       }
       
-      // Try to find using previous_league_id chain
+      // Try to find using previous_league_id chain for adjacent seasons
       const currentYear = parseInt(currentSeason);
       const targetYear = parseInt(season);
       
-      if (targetYear === currentYear - 1) {
-        // Look for previous season in the consolidated league
+      // For previous seasons, try to find in consolidated league
+      if (targetYear < currentYear) {
         const previousSeason = league.seasons.find(s => parseInt(s.season) === targetYear);
         if (previousSeason) {
+          console.log(`Found previous season ${season} in consolidated league:`, previousSeason.league_id);
           return previousSeason.league_id;
+        }
+        
+        // Try using previous_league_id from current season
+        if (targetYear === currentYear - 1 && league.mostRecentSeason.previous_league_id) {
+          console.log(`Using previous_league_id for ${season}:`, league.mostRecentSeason.previous_league_id);
+          return league.mostRecentSeason.previous_league_id;
         }
       }
       
@@ -188,26 +198,40 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       originalOwnerId
     });
     
+    // Fallback: if no previous season data, try to use current season data
+    let standingsData = previousSeasonData;
+    let standingsSource = previousSeason;
+    
+    if (!previousSeasonData) {
+      // Try current season as fallback
+      const currentSeasonData = crossSeasonData[league.mostRecentSeason.season];
+      if (currentSeasonData) {
+        standingsData = currentSeasonData;
+        standingsSource = league.mostRecentSeason.season;
+        console.log(`Using ${standingsSource} season data as fallback for standings`);
+      }
+    }
+    
     // Find the original owner's info and calculate pick number
     let originalOwnerName = 'Unknown';
     let inferredPickNumber = '';
     let selectedPlayer = '';
     
-    if (previousSeasonData && originalOwnerId) {
+    if (standingsData && originalOwnerId) {
       // Find the original owner in the previous season to get their final rank
-      const originalRoster = previousSeasonData.rosters.find(r => r.roster_id === originalOwnerId);
-      console.log('Original roster found in previous season:', !!originalRoster, originalRoster?.roster_id);
+      const originalRoster = standingsData.rosters.find(r => r.roster_id === originalOwnerId);
+      console.log(`Original roster found in ${standingsSource} season:`, !!originalRoster, originalRoster?.roster_id);
       
       if (originalRoster) {
-        const originalUser = previousSeasonData.users.find(u => u.user_id === originalRoster.owner_id);
+        const originalUser = standingsData.users.find(u => u.user_id === originalRoster.owner_id);
         console.log('Original user found:', !!originalUser, originalUser?.username);
         
         if (originalUser) {
           originalOwnerName = originalUser.display_name || originalUser.username;
           
           // Calculate final rank and infer pick number
-          const finalRank = calculateRankFromRecord(originalRoster, previousSeasonData.rosters);
-          const totalTeams = previousSeasonData.rosters.length;
+          const finalRank = calculateRankFromRecord(originalRoster, standingsData.rosters);
+          const totalTeams = standingsData.rosters.length;
           const pickInRound = totalTeams - finalRank + 1;
           inferredPickNumber = `${pick.round}.${pickInRound.toString().padStart(2, '0')}`;
           
@@ -215,10 +239,13 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
             finalRank,
             totalTeams,
             pickInRound,
-            inferredPickNumber
+            inferredPickNumber,
+            standingsSource
           });
         }
       }
+    } else {
+      console.warn(`No standings data available for pick calculation. standingsData: ${!!standingsData}, originalOwnerId: ${originalOwnerId}`);
     }
     
     // Check if the draft for this pick season has occurred
