@@ -331,11 +331,11 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     
     console.log(`🎯 Searching ${draftPicks.length} picks from ${pick.season} draft`);
     
+    // Find by original owner and round
     const originalOwnerId = pick.owner_id || pick.previous_owner_id || pick.roster_id;
     console.log(`🔍 Looking for owner ${originalOwnerId} in round ${pick.round}`);
     
     if (originalOwnerId) {
-      // Find picks by this owner in this round
       const ownerPicksInRound = draftPicks.filter(p => 
         p.roster_id === originalOwnerId && 
         Math.ceil(p.pick_no / pickSeasonData.rosters.length) === pick.round
