@@ -175,7 +175,9 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     const roundSuffix = pick.round === 1 ? 'st' : pick.round === 2 ? 'nd' : pick.round === 3 ? 'rd' : 'th';
     const originalOwnerId = pick.original_owner || pick.previous_owner_id;
     
-    // Get standings data from the year before the draft
+    const isPastSeason = pickYear < currentYear;
+    const isCurrentSeason = pickYear === currentYear;
+    const isFutureSeason = pickYear > currentYear;
     const standingsData = crossSeasonData[standingsYear.toString()];
     // Get draft data from the pick year
     const draftData = crossSeasonData[pick.season];
@@ -340,20 +342,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       tradeDetails.push({
         user,
         received,
-        sent,
-        receivedPicks: [],
-        sentPicks: []
-      });
-    });
-
-    // Process draft picks
-    (trade.draft_picks || []).forEach(pick => {
-      // Find who received the pick
-      const receiver = tradeDetails.find(d => getUserByRosterId(pick.owner_id)?.user_id === d.user.user_id);
-      if (receiver) {
-        receiver.receivedPicks.push(formatDraftPick(pick));
-      }
-      
+      // Future season - draft hasn't occurred yet, show calculated position
       // Find who sent the pick
       const sender = tradeDetails.find(d => getUserByRosterId(pick.previous_owner_id)?.user_id === d.user.user_id);
       if (sender) {
@@ -362,6 +351,8 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     });
 
     return tradeDetails;
+    
+    return `${pick.season} ${pick.round}${roundSuffix} Round Pick`;
   };
 
   return (
