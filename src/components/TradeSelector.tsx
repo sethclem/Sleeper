@@ -203,14 +203,14 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     }
     
     if (originalOwnerId) {
-      const originalRoster = standingsData.rosters.find(r => r.roster_id === originalOwnerId);
+        if (draftResult && draftResult.player && draftResult.position) {
       if (originalRoster) {
         const originalUser = standingsData.users.find(u => u.user_id === originalRoster.owner_id);
         if (originalUser) {
           originalOwnerName = originalUser.display_name || originalUser.username;
           const finalRank = calculateRankFromRecord(originalRoster, standingsData.rosters);
           const totalTeams = standingsData.rosters.length;
-          const pickInRound = totalTeams - finalRank + 1;
+        } else if (draftResult && draftResult.position) {
           draftPosition = `${pick.round}.${pickInRound.toString().padStart(2, '0')}`;
           console.log(`📈 ${originalOwnerName} finished rank ${finalRank}/${totalTeams} → pick ${draftPosition}`);
         }
