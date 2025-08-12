@@ -36,53 +36,54 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
   const [seasonToLeagueId, setSeasonToLeagueId] = useState<Record<string, string>>({});
 
   React.useEffect(() => {
-    loadUnifiedLeagueData();
+    loadMultiSeasonData();
   }, [leagueId]);
 
-  const loadUnifiedLeagueData = async () => {
+  const loadMultiSeasonData = async () => {
     if (dataLoaded) return;
     
     try {
-      console.log('🚀 Loading unified league data across all seasons...');
+      console.log('🚀 Loading multi-season data for trades...');
       
-      // Build complete season mapping for the entire league
+      // Build season to league ID mapping
       const seasonMapping = buildCompleteSeasonMapping();
+      setSeasonToLeagueId(seasonMapping);
       
-      // Load ALL seasons for this league (not just ones referenced in trades)
-      const allSeasons = Object.keys(seasonMapping);
-      console.log('📅 Loading all seasons for league:', allSeasons.sort());
+      // Identify all seasons needed for trades
+      const seasonsNeeded = identifyAllSeasonsInTrades();
+      console.log('📅 Seasons needed:', Array.from(seasonsNeeded).sort());
       
-      // Load unified data
-      const unifiedData = await loadAllSeasonData(allSeasons, seasonMapping);
-      setUnifiedLeagueData(unifiedData);
+      // Load data for each season
+      const multiSeasonDataMap = await loadAllSeasonData(seasonsNeeded, seasonMapping);
+      setMultiSeasonData(multiSeasonDataMap);
       
       setDataLoaded(true);
-      console.log('✅ Unified league data loading complete');
+      console.log('✅ Multi-season data loading complete');
     } catch (error) {
-      console.error('❌ Error loading unified league data:', error);
+      console.error('❌ Error loading multi-season data:', error);
     }
   };
 
-  const buildSeasonToLeagueIdMapping = (): Record<string, string> => {
+  const buildCompleteSeasonMapping = (): Record<string, string> => {
     const mapping: Record<string, string> = {};
     
-    // Map each season to its league ID
+    // Map each known season to its league ID
     league.seasons.forEach(season => {
       mapping[season.season] = season.league_id;
     });
     
-    // For seasons not in our league history, try to infer
+    // Extend mapping for potential future seasons
     const currentYear = new Date().getFullYear();
     const mostRecentSeason = league.mostRecentSeason;
     
-    // For future seasons, use the most recent league ID
-    for (let year = parseInt(mostRecentSeason.season) + 1; year <= currentYear + 5; year++) {
+    // For future seasons, use the most recent league ID (they'll share the same league)
+    for (let year = parseInt(mostRecentSeason.season) + 1; year <= currentYear + 3; year++) {
       if (!mapping[year.toString()]) {
         mapping[year.toString()] = mostRecentSeason.league_id;
       }
     }
     
-    // For past seasons, try to use previous_league_id chain
+    // For past seasons, use previous_league_id chain
     league.seasons.forEach(season => {
       if (season.previous_league_id) {
         const previousYear = (parseInt(season.season) - 1).toString();
@@ -95,7 +96,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     return mapping;
   };
   
-  const identifySeasonsNeededForTrades = (): Set<string> => {
+  const identifyAllSeasonsInTrades = (): Set<string> => {
     const seasonsNeeded = new Set<string>();
     
     trades.forEach(trade => {
@@ -114,7 +115,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     return seasonsNeeded;
   };
   
-  const loadDataForSeasons = async (
+  const loadAllSeasonData = async (
     seasonsNeeded: Set<string>, 
     seasonMapping: Record<string, string>
   ): Promise<Record<string, {
