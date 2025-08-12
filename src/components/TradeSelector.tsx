@@ -83,14 +83,17 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
           const [rostersData, usersData, draftsData] = await Promise.all([
             SleeperAPI.getLeagueRosters(leagueIdForSeason),
             SleeperAPI.getLeagueUsers(leagueIdForSeason),
-            SleeperAPI.getLeagueDrafts(leagueIdForSeason)
-          ]);
+          const selectedPick = draftPicks.find(p => p.pick_no === overallPickNumber);
+          console.log(`Found pick:`, selectedPick);
           
+          if (selectedPick && selectedPick.player_id) {
+            const selectedPlayer = getPlayerName(selectedPick.player_id);
           // Load draft picks for this season
           const seasonDraftPicks: Record<string, DraftPickDetail[]> = {};
           for (const draft of draftsData) {
             const picks = await SleeperAPI.getDraftPicks(draft.draft_id);
-            seasonDraftPicks[draft.draft_id] = picks;
+            console.log(`No player found for pick ${overallPickNumber}, selectedPick:`, selectedPick);
+            console.log(`Available pick numbers:`, draftPicks.map(p => p.pick_no).sort((a, b) => a - b));
           }
           
           crossSeasonDataMap[season] = {
