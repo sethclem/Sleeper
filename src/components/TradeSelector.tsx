@@ -316,46 +316,12 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     // Get the draft from the pick's exact season
     const draft = pickSeasonData.drafts[0];
     
-    // CRITICAL: Only look for players in the EXACT same year as the pick
-    const pickYear = parseInt(pick.season);
-    const currentYear = new Date().getFullYear();
-    
-    // If this is a future draft that hasn't occurred, don't show any player
-    if (pickYear > currentYear) {
-      console.log(`🚫 Pick is for ${pickYear}, which is in the future. No player available.`);
-      console.log(`🚫 Draft season mismatch: pick is ${pick.season}, draft is ${draft.season}`);
-      return null;
-    
-    // Verify we have draft data for the EXACT pick season
-    if (!pickSeasonData || !pickSeasonData.drafts.length) {
-      console.log(`❌ No draft data found for pick season ${pick.season}`);
-      return null;
-    }
-    
     // Verify this draft data is actually from the pick's season
-    // CRITICAL: Only look for players in the EXACT same year as the pick
-    const pickYear = parseInt(pick.season);
-    const currentYear = new Date().getFullYear();
-    
-    // If this is a future draft that hasn't occurred, don't show any player
-    if (pickYear > currentYear) {
-      console.log(`🚫 Pick is for ${pickYear}, which is in the future. No player available.`);
-      console.log(`🚫 Draft season mismatch: pick is ${pick.season}, draft is ${draft.season}`);
-      return null;
-    
-    // Verify we have draft data for the EXACT pick season
-    if (!pickSeasonData || !pickSeasonData.drafts.length) {
-      console.log(`❌ No draft data found for pick season ${pick.season}`);
-      return null;
-    }
-    
-    // Verify this draft data is actually from the pick's season
-    const draft = pickSeasonData.drafts[0];
     if (draft.season !== pick.season) {
       console.log(`🚫 Draft season mismatch: pick is ${pick.season}, draft is ${draft.season}`);
       return null;
     }
-    }
+    
     const draftPicks = pickSeasonData.draftPicks[draft.draft_id] || [];
     
     if (!draftPicks.length) {
