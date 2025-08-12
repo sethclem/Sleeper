@@ -213,34 +213,24 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     
     console.log(`📊 Pick season (${pick.season}): ${!!pickSeasonData}, Standings season (${standingsYear}): ${!!standingsSeasonData}`);
     
-    // Determine season status
-    const isPastOrCurrentSeason = pickYear <= currentYear;
-    const standingsSeasonComplete = standingsSeasonData?.seasonComplete || false;
-    
     // Base format
     const roundSuffix = pick.round === 1 ? 'st' : pick.round === 2 ? 'nd' : pick.round === 3 ? 'rd' : 'th';
     let result = `${pick.season} ${pick.round}${roundSuffix} Round Pick`;
     
-    // If we don't have standings data or season isn't complete, return basic format
-    if (!standingsSeasonData || !standingsSeasonComplete) {
-      console.log(`⏸️ Standings season ${standingsYear} not complete or no data available`);
-      return result;
-    }
-    
-    // Calculate draft slot from standings
-    const draftSlot = calculateDraftSlot(pick, standingsSeasonData);
-    if (draftSlot) {
-      result += ` ${draftSlot}`;
-      console.log(`📍 Draft slot calculated: ${draftSlot}`);
-    }
-    
-    // For past/current seasons, try to find the drafted player
-    if (isPastOrCurrentSeason && pickSeasonData) {
-      const draftedPlayer = findDraftedPlayer(pick, pickSeasonData, draftSlot);
-      if (draftedPlayer) {
-        result += ` (${draftedPlayer})`;
-        console.log(`👤 Drafted player found: ${draftedPlayer}`);
+    // Add draft slot if we have standings data and season is complete
+    if (standingsSeasonData?.seasonComplete) {
+      const draftSlot = calculateDraftSlot(pick, standingsSeasonData);
+      if (draftSlot) {
+        result += ` ${draftSlot}`;
+        console.log(`📍 Draft slot calculated: ${draftSlot}`);
       }
+    }
+    
+    // Try to find drafted player ONLY from the exact pick season
+    const draftedPlayer = findDraftedPlayerFromExactSeason(pick, pickSeasonData);
+    if (draftedPlayer) {
+      result += ` (${draftedPlayer})`;
+      console.log(`👤 Drafted player found: ${draftedPlayer}`);
     }
     
     console.log(`✅ Final format: ${result}`);
@@ -317,23 +307,37 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       return null;
     }
     
-    if (standingsSeasonData?.seasonComplete) {
-      const draftSlot = calculateDraftSlot(pick, standingsSeasonData);
-      if (draftSlot) {
-        result += ` ${draftSlot}`;
-        console.log(`📍 Draft slot calculated: ${draftSlot}`);
+    // Try to find by slot if we have it
+    if (draftSlot) {
+      const [roundStr, slotStr] = draftSlot.split('.');
+      const targetRound = parseInt(roundStr);
+      const targetSlot = parseInt(slotStr);
+      
+      // Find pick by round and slot position
+      const totalTeams = pickSeasonData.rosters.length;
+      const targetPickNumber = (targetRound - 1) * totalTeams + targetSlot;
+      
+      const foundPick = draftPicks.find(p => p.pick_no === targetPickNumber);
+      if (foundPick && foundPick.player_id) {
+        return getPlayerName(foundPick.player_id);
       }
     }
     
-    // Try to find drafted player ONLY from the exact pick season
-    const draftedPlayer = findDraftedPlayerFromExactSeason(pick, pickSeasonData);
-    if (draftedPlayer) {
-      result += ` (${draftedPlayer})`;
-      console.log(`👤 Drafted player found: ${draftedPlayer}`);
+    // Fallback: try to find by original owner and round
+    const originalOwnerId = pick.owner_id || pick.previous_owner_id || pick.roster_id;
+    if (originalOwnerId) {
+      const ownerPicksInRound = draftPicks.filter(p => 
+        p.roster_id === originalOwnerId && 
+        Math.ceil(p.pick_no / pickSeasonData.rosters.length) === pick.round
+      );
+      
+      if (ownerPicksInRound.length > 0 && ownerPicksInRound[0].player_id) {
+        return getPlayerName(ownerPicksInRound[0].player_id);
+      }
     }
     
-    console.log(`✅ Final format: ${result}`);
-    return result;
+    console.log('❌ No drafted player found');
+    return null;
   };
   
   const findDraftedPlayerFromExactSeason = (pick: DraftPick, pickSeasonData: any): string | null => {
@@ -389,39 +393,6 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     }
     
     console.log(`❌ No player found in ${pick.season} draft`);
-    return null;
-  };
-    
-    // Try to find by slot if we have it
-    if (draftSlot) {
-      const [roundStr, slotStr] = draftSlot.split('.');
-      const targetRound = parseInt(roundStr);
-      const targetSlot = parseInt(slotStr);
-      
-      // Find pick by round and slot position
-      const totalTeams = pickSeasonData.rosters.length;
-      const targetPickNumber = (targetRound - 1) * totalTeams + targetSlot;
-      
-      const foundPick = draftPicks.find(p => p.pick_no === targetPickNumber);
-      if (foundPick && foundPick.player_id) {
-        return getPlayerName(foundPick.player_id);
-      }
-    }
-    
-    // Fallback: try to find by original owner and round
-    const originalOwnerId = pick.owner_id || pick.previous_owner_id || pick.roster_id;
-    if (originalOwnerId) {
-      const ownerPicksInRound = draftPicks.filter(p => 
-        p.roster_id === originalOwnerId && 
-        Math.ceil(p.pick_no / pickSeasonData.rosters.length) === pick.round
-      );
-      
-      if (ownerPicksInRound.length > 0 && ownerPicksInRound[0].player_id) {
-        return getPlayerName(ownerPicksInRound[0].player_id);
-      }
-    }
-    
-    console.log('❌ No drafted player found');
     return null;
   };
 
