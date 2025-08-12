@@ -320,26 +320,32 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     const pickYear = parseInt(pick.season);
     const currentYear = new Date().getFullYear();
     
-    // If this is a future draft that hasn't occurred, don't show any player
+    console.log(`🔍 Searching for player in ${pick.season} draft`);
+    console.log(`📊 Pick season data available:`, !!pickSeasonData);
+    
+    // Get the correct season data for this pick's season
+    const correctSeasonData = multiSeasonData[pick.season];
+    console.log(`📊 Correct season data for ${pick.season}:`, !!correctSeasonData);
+    
+    // If this is a future draft, absolutely no player should be shown
     if (pickYear > currentYear) {
       console.log(`🚫 Pick is for ${pickYear}, which is in the future. No player available.`);
-      console.log(`🚫 Draft season mismatch: pick is ${pick.season}, draft is ${draft.season}`);
       return null;
+    }
+    
+    // Use the correct season data for the pick's season
+    const seasonDataToUse = correctSeasonData || pickSeasonData;
     
     // Verify we have draft data for the EXACT pick season
-    if (!pickSeasonData || !pickSeasonData.drafts.length) {
+    if (!seasonDataToUse || !seasonDataToUse.drafts.length) {
       console.log(`❌ No draft data found for pick season ${pick.season}`);
       return null;
     }
     
-    // Verify this draft data is actually from the pick's season
-    const draft = pickSeasonData.drafts[0];
-    if (draft.season !== pick.season) {
-      console.log(`🚫 Draft season mismatch: pick is ${pick.season}, draft is ${draft.season}`);
-      return null;
-    }
-    }
-    const draftPicks = pickSeasonData.draftPicks[draft.draft_id] || [];
+    // Get the draft from the pick's exact season
+    const draft = seasonDataToUse.drafts[0];
+    
+    const draftPicks = seasonDataToUse.draftPicks[draft.draft_id] || [];
     
     if (!draftPicks.length) {
       console.log(`❌ No draft picks found for ${pick.season} draft`);
@@ -356,7 +362,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     if (originalOwnerId) {
       const ownerPicksInRound = draftPicks.filter(p => 
         p.roster_id === originalOwnerId && 
-        Math.ceil(p.pick_no / pickSeasonData.rosters.length) === pick.round
+        Math.ceil(p.pick_no / seasonDataToUse.rosters.length) === pick.round
       );
       
       if (ownerPicksInRound.length > 0 && ownerPicksInRound[0].player_id) {
