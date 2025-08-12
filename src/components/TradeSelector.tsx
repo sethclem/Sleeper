@@ -201,50 +201,85 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
   };
 
   const formatDraftPick = (pick: DraftPick) => {
-    console.log(`🎯 Formatting ${pick.season} Round ${pick.round} pick`);
+    console.log(`\n🎯 Formatting ${pick.season} Round ${pick.round} pick`);
+    
+    const currentYear = new Date().getFullYear();
+    const pickYear = parseInt(pick.season);
+    const standingsYear = (pickYear - 1).toString();
+    
+    // Get data for both seasons - CRITICAL: Use pick.season for draft data
+    const pickSeasonData = multiSeasonData[pick.season];  // This should have 2025 draft data
+    const standingsSeasonData = multiSeasonData[standingsYear];
+    
+    console.log(`📊 Pick season (${pick.season}): ${!!pickSeasonData}, Standings season (${standingsYear}): ${!!standingsSeasonData}`);
+    
+    if (pickSeasonData) {
+      console.log(`📊 Pick season data for ${pick.season}:`, {
+        drafts: pickSeasonData.drafts.length,
+        draftIds: pickSeasonData.drafts.map(d => `${d.draft_id} (${d.season})`),
+        totalPicks: Object.values(pickSeasonData.draftPicks).reduce((sum, picks) => sum + picks.length, 0)
+      });
+    }
+    
+    // Determine season status
+    const isPastOrCurrentSeason = pickYear <= currentYear;
+    const standingsSeasonComplete = standingsSeasonData?.seasonComplete || false;
     
     // Base format
     const roundSuffix = pick.round === 1 ? 'st' : pick.round === 2 ? 'nd' : pick.round === 3 ? 'rd' : 'th';
     let result = `${pick.season} ${pick.round}${roundSuffix} Round Pick`;
     
-    // Try to calculate draft slot from standings
+    // If we don't have standings data or season isn't complete, return basic format
+    if (!standingsSeasonData || !standingsSeasonComplete) {
+      console.log(`⏸️ Standings season ${standingsYear} not complete or no data available`);
+      return result;
+    }
+    
+    // Calculate draft slot from standings
     const draftSlot = calculateDraftSlotFromUnifiedData(pick);
     if (draftSlot) {
       result += ` ${draftSlot}`;
-      console.log(`📍 Draft slot: ${draftSlot}`);
+      console.log(`📍 Draft slot calculated: ${draftSlot}`);
     }
     
-    // Try to find the drafted player
-    const draftedPlayer = findDraftedPlayerFromUnifiedData(pick, draftSlot);
-    if (draftedPlayer) {
-      result += ` (${draftedPlayer})`;
-      console.log(`👤 Drafted player: ${draftedPlayer}`);
+    // For past/current seasons, try to find the drafted player
+    if (isPastOrCurrentSeason && pickSeasonData) {
+      const draftedPlayer = findDraftedPlayer(pick, pickSeasonData, draftSlot);
+      if (draftedPlayer) {
+        result += ` (${draftedPlayer})`;
+        console.log(`👤 Drafted player found: ${draftedPlayer}`);
+      }
     }
     
-    console.log(`✅ Final: ${result}`);
+    console.log(`✅ Final format: ${result}`);
     return result;
   };
   
-  const calculateDraftSlot = (pick: DraftPick, standingsData: any): string | null => {
+  const calculateDraftSlotFromUnifiedData = (pick: DraftPick): string | null => {
+    const standingsYear = (parseInt(pick.season) - 1).toString();
+    const standingsRosters = unifiedLeagueData.allRosters[standingsYear];
+    
+    if (!standingsRosters || !unifiedLeagueData.completedSeasons.has(standingsYear)) {
+      console.log(`⏸️ Standings for ${standingsYear} not available or incomplete`);
+      return null;
+    }
+    
     const originalOwnerId = pick.owner_id || pick.previous_owner_id || pick.roster_id;
     if (!originalOwnerId) {
       console.warn('❌ No original owner ID found for pick');
       return null;
     }
     
-    // Find the roster in standings data
-    const originalRoster = standingsData.rosters.find((r: SleeperRoster) => r.roster_id === originalOwnerId);
+    const originalRoster = standingsRosters.find(r => r.roster_id === originalOwnerId);
     if (!originalRoster) {
-      console.warn(`❌ Original roster ${originalOwnerId} not found in standings`);
+      console.warn(`❌ Original roster ${originalOwnerId} not found in ${standingsYear} standings`);
       return null;
     }
     
-    // Calculate final rank
-    const finalRank = calculateFinalRank(originalRoster, standingsData.rosters);
-    const roundNum = pick.round;
+    const finalRank = calculateFinalRank(originalRoster, standingsRosters);
     const slotNum = finalRank.toString().padStart(2, '0');
     
-    return `${roundNum}.${slotNum}`;
+    return `${pick.round}.${slotNum}`;
   };
   
   const calculateFinalRank = (roster: SleeperRoster, allRosters: SleeperRoster[]): number => {
