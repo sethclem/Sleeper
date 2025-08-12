@@ -201,17 +201,17 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
   };
 
   const formatDraftPick = (pick: DraftPick) => {
-    console.log(`\n🎯 Formatting ${pick.season} Round ${pick.round} pick (comprehensive data available)`);
+    console.log(`\n🎯 Formatting ${pick.season} Round ${pick.round} pick`);
     
     const currentYear = new Date().getFullYear();
     const pickYear = parseInt(pick.season);
     const standingsYear = (pickYear - 1).toString();
     
-    // Get data for both seasons from our comprehensive dataset
+    // Get data for both seasons
     const pickSeasonData = multiSeasonData[pick.season];
     const standingsSeasonData = multiSeasonData[standingsYear];
     
-    console.log(`📊 Pick season (${pick.season}): ${!!pickSeasonData} (${pickSeasonData?.drafts?.length || 0} drafts), Standings season (${standingsYear}): ${!!standingsSeasonData}`);
+    console.log(`📊 Pick season (${pick.season}): ${!!pickSeasonData}, Standings season (${standingsYear}): ${!!standingsSeasonData}`);
     
     // Determine season status
     const isPastOrCurrentSeason = pickYear <= currentYear;
@@ -223,15 +223,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     
     // If we don't have standings data or season isn't complete, return basic format
     if (!standingsSeasonData || !standingsSeasonComplete) {
-      console.log(`⏸️ Standings season ${standingsYear} not complete or no data available - checking for draft results anyway`);
-      // Still try to find drafted player even without slot info
-      if (isPastOrCurrentSeason && pickSeasonData) {
-        const draftedPlayer = findDraftedPlayerFromExactSeason(pick, pickSeasonData);
-        if (draftedPlayer) {
-          result += ` (${draftedPlayer})`;
-          console.log(`👤 Drafted player found without slot: ${draftedPlayer}`);
-        }
-      }
+      console.log(`⏸️ Standings season ${standingsYear} not complete or no data available`);
       return result;
     }
     
@@ -244,7 +236,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     
     // For past/current seasons, try to find the drafted player
     if (isPastOrCurrentSeason && pickSeasonData) {
-      const draftedPlayer = findDraftedPlayerFromExactSeason(pick, pickSeasonData, draftSlot);
+      const draftedPlayer = findDraftedPlayer(pick, pickSeasonData, draftSlot);
       if (draftedPlayer) {
         result += ` (${draftedPlayer})`;
         console.log(`👤 Drafted player found: ${draftedPlayer}`);
@@ -358,7 +350,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     return null;
   };
   
-  const findDraftedPlayerFromExactSeason = (pick: DraftPick, pickSeasonData: any): string | null => {
+  const findDraftedPlayerFromExactSeason = (pick: DraftPick, pickSeasonData: any, draftSlot?: string | null): string | null => {
     // CRITICAL: Only look for players in the EXACT same year as the pick
     const pickYear = parseInt(pick.season);
     const currentYear = new Date().getFullYear();
@@ -395,7 +387,25 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     
     console.log(`🎯 Searching ${draftPicks.length} picks from ${pick.season} draft`);
     
-    // Method 1: Find by original owner and round in the EXACT season
+    // Method 1: Try to find by slot if we have it
+    if (draftSlot) {
+      const [roundStr, slotStr] = draftSlot.split('.');
+      const targetRound = parseInt(roundStr);
+      const targetSlot = parseInt(slotStr);
+      
+      // Find pick by round and slot position
+      const totalTeams = pickSeasonData.rosters.length;
+      const targetPickNumber = (targetRound - 1) * totalTeams + targetSlot;
+      
+      const foundPick = draftPicks.find(p => p.pick_no === targetPickNumber);
+      if (foundPick && foundPick.player_id) {
+        const playerName = getPlayerName(foundPick.player_id);
+        console.log(`✅ Found player by slot: ${playerName}`);
+        return playerName;
+      }
+    }
+    
+    // Method 2: Find by original owner and round in the EXACT season
     const originalOwnerId = pick.owner_id || pick.previous_owner_id || pick.roster_id;
     if (originalOwnerId) {
       const ownerPicksInRound = draftPicks.filter(p => 
