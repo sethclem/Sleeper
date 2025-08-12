@@ -202,7 +202,6 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
 
   const formatDraftPick = (pick: DraftPick) => {
     console.log(`\n🎯 Formatting ${pick.season} Round ${pick.round} pick`);
-    console.log(`📊 Available seasons in multiSeasonData:`, Object.keys(multiSeasonData));
     
     const currentYear = new Date().getFullYear();
     const pickYear = parseInt(pick.season);
@@ -213,14 +212,6 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     const standingsSeasonData = multiSeasonData[standingsYear];
     
     console.log(`📊 Pick season (${pick.season}): ${!!pickSeasonData}, Standings season (${standingsYear}): ${!!standingsSeasonData}`);
-    
-    if (pickSeasonData) {
-      console.log(`📊 Pick season data:`, {
-        rosters: pickSeasonData.rosters.length,
-        drafts: pickSeasonData.drafts.length,
-        draftPicks: Object.keys(pickSeasonData.draftPicks).length
-      });
-    }
     
     // Determine season status
     const isPastOrCurrentSeason = pickYear <= currentYear;
@@ -365,6 +356,14 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     const currentYear = new Date().getFullYear();
     
     console.log(`🔍 Searching for player in ${pick.season} draft only`);
+    console.log(`📊 pickSeasonData available:`, !!pickSeasonData);
+    
+    if (pickSeasonData) {
+      console.log(`📊 Draft data:`, {
+        drafts: pickSeasonData.drafts.length,
+        draftPicks: Object.keys(pickSeasonData.draftPicks)
+      });
+    }
     
     // If this is a future draft, absolutely no player should be shown
     if (pickYear > currentYear) {
@@ -380,6 +379,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     
     // Get the draft from the pick's exact season
     const draft = pickSeasonData.drafts[0];
+    console.log(`📊 Using draft:`, draft.draft_id, `from season:`, draft.season);
     
     // DOUBLE CHECK: Verify this draft is actually from the pick's season
     if (draft.season !== pick.season) {
@@ -388,6 +388,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     }
     
     const draftPicks = pickSeasonData.draftPicks[draft.draft_id] || [];
+    console.log(`📊 Draft picks available:`, draftPicks.length);
     
     if (!draftPicks.length) {
       console.log(`❌ No draft picks found for ${pick.season} draft`);
@@ -398,11 +399,15 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     
     // Method 1: Find by original owner and round in the EXACT season
     const originalOwnerId = pick.owner_id || pick.previous_owner_id || pick.roster_id;
+    console.log(`🔍 Looking for owner ${originalOwnerId} in round ${pick.round}`);
+    
     if (originalOwnerId) {
       const ownerPicksInRound = draftPicks.filter(p => 
         p.roster_id === originalOwnerId && 
         Math.ceil(p.pick_no / pickSeasonData.rosters.length) === pick.round
       );
+      
+      console.log(`📊 Found ${ownerPicksInRound.length} picks for owner in round ${pick.round}`);
       
       if (ownerPicksInRound.length > 0 && ownerPicksInRound[0].player_id) {
         const playerName = getPlayerName(ownerPicksInRound[0].player_id);
