@@ -46,15 +46,15 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       console.log('🚀 Loading multi-season data for trades...');
       
       // Build season to league ID mapping
-      const seasonMapping = buildCompleteSeasonMapping();
+      const seasonMapping = buildSeasonToLeagueIdMapping();
       setSeasonToLeagueId(seasonMapping);
       
       // Identify all seasons needed for trades
-      const seasonsNeeded = identifyAllSeasonsInTrades();
+      const seasonsNeeded = identifySeasonsNeededForTrades();
       console.log('📅 Seasons needed:', Array.from(seasonsNeeded).sort());
       
       // Load data for each season
-      const multiSeasonDataMap = await loadAllSeasonData(seasonsNeeded, seasonMapping);
+      const multiSeasonDataMap = await loadAllSeasonData(Array.from(seasonsNeeded), seasonMapping);
       setMultiSeasonData(multiSeasonDataMap);
       
       setDataLoaded(true);
@@ -64,26 +64,26 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     }
   };
 
-  const buildCompleteSeasonMapping = (): Record<string, string> => {
+  const buildSeasonToLeagueIdMapping = (): Record<string, string> => {
     const mapping: Record<string, string> = {};
     
-    // Map each known season to its league ID
+    // Map each season to its league ID
     league.seasons.forEach(season => {
       mapping[season.season] = season.league_id;
     });
     
-    // Extend mapping for potential future seasons
+    // For seasons not in our league history, try to infer
     const currentYear = new Date().getFullYear();
     const mostRecentSeason = league.mostRecentSeason;
     
-    // For future seasons, use the most recent league ID (they'll share the same league)
-    for (let year = parseInt(mostRecentSeason.season) + 1; year <= currentYear + 3; year++) {
+    // For future seasons, use the most recent league ID
+    for (let year = parseInt(mostRecentSeason.season) + 1; year <= currentYear + 5; year++) {
       if (!mapping[year.toString()]) {
         mapping[year.toString()] = mostRecentSeason.league_id;
       }
     }
     
-    // For past seasons, use previous_league_id chain
+    // For past seasons, try to use previous_league_id chain
     league.seasons.forEach(season => {
       if (season.previous_league_id) {
         const previousYear = (parseInt(season.season) - 1).toString();
@@ -96,7 +96,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     return mapping;
   };
   
-  const identifyAllSeasonsInTrades = (): Set<string> => {
+  const identifySeasonsNeededForTrades = (): Set<string> => {
     const seasonsNeeded = new Set<string>();
     
     trades.forEach(trade => {
@@ -116,20 +116,21 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
   };
   
   const loadAllSeasonData = async (
-    seasonsNeeded: Set<string>, 
+    allSeasons: string[], 
     seasonMapping: Record<string, string>
-  ): Promise<Record<string, {
-    rosters: SleeperRoster[];
-    users: SleeperUser[];
-    drafts: DraftInfo[];
-    draftPicks: Record<string, DraftPickDetail[]>;
-    leagueId: string;
-    seasonComplete: boolean;
-  }>> => {
-    const dataMap: Record<string, any> = {};
+  ) => {
+    const unifiedData = {
+      allRosters: {} as Record<string, SleeperRoster[]>,
+      allUsers: {} as Record<string, SleeperUser[]>,
+      allDrafts: {} as Record<string, DraftInfo[]>,
+      allDraftPicks: {} as Record<string, DraftPickDetail[]>,
+      seasonToLeagueId: seasonMapping,
+      completedSeasons: new Set<string>()
+    };
+    
     const currentYear = new Date().getFullYear();
     
-    for (const season of seasonsNeeded) {
+    for (const season of allSeasons) {
       const leagueIdForSeason = seasonMapping[season];
       if (!leagueIdForSeason) {
         console.warn(`❌ No league ID found for season ${season}`);
@@ -145,15 +146,19 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
           SleeperAPI.getLeagueDrafts(leagueIdForSeason)
         ]);
         
-        // Load draft picks for all drafts in this season
-        const seasonDraftPicks: Record<string, DraftPickDetail[]> = {};
+        // Store season data
+        unifiedData.allRosters[season] = rostersData;
+        unifiedData.allUsers[season] = usersData;
+        unifiedData.allDrafts[season] = draftsData;
+        
+        // Load all draft picks for this season
         for (const draft of draftsData) {
           try {
             const picks = await SleeperAPI.getDraftPicks(draft.draft_id);
-            seasonDraftPicks[draft.draft_id] = picks;
+            unifiedData.allDraftPicks[draft.draft_id] = picks;
           } catch (error) {
             console.warn(`⚠️ Failed to load picks for draft ${draft.draft_id}:`, error);
-            seasonDraftPicks[draft.draft_id] = [];
+            unifiedData.allDraftPicks[draft.draft_id] = [];
           }
         }
         
@@ -162,24 +167,20 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
         const seasonComplete = seasonYear < currentYear || 
           (seasonYear === currentYear && isSeasonComplete(season));
         
-        dataMap[season] = {
-          rosters: rostersData,
-          users: usersData,
-          drafts: draftsData,
-          draftPicks: seasonDraftPicks,
-          leagueId: leagueIdForSeason,
-          seasonComplete
-        };
+        if (seasonComplete) {
+          unifiedData.completedSeasons.add(season);
+        }
         
-        const totalPicks = Object.values(seasonDraftPicks).reduce((sum, picks) => sum + picks.length, 0);
-        console.log(`✅ ${season}: ${rostersData.length} teams, ${draftsData.length} drafts, ${totalPicks} picks, complete: ${seasonComplete}`);
+        const seasonPickCount = draftsData.reduce((sum, draft) => 
+          sum + (unifiedData.allDraftPicks[draft.draft_id]?.length || 0), 0);
+        console.log(`✅ ${season}: ${rostersData.length} teams, ${draftsData.length} drafts, ${seasonPickCount} picks, complete: ${seasonComplete}`);
         
       } catch (error) {
         console.error(`❌ Failed to load season ${season}:`, error);
       }
     }
     
-    return dataMap;
+    return unifiedData;
   };
   
   const isSeasonComplete = (season: string): boolean => {
