@@ -98,7 +98,6 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
   
   const identifySeasonsNeededForTrades = (): Set<string> => {
     const seasonsNeeded = new Set<string>();
-    const currentYear = new Date().getFullYear();
     
     trades.forEach(trade => {
       (trade.draft_picks || []).forEach(pick => {
@@ -112,13 +111,6 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
         }
       });
     });
-    
-    // Also add common seasons that might be referenced
-    for (let year = 2018; year <= currentYear + 2; year++) {
-      if (league.seasons.some(s => parseInt(s.season) === year)) {
-        seasonsNeeded.add(year.toString());
-      }
-    }
     
     return seasonsNeeded;
   };
@@ -210,6 +202,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
 
   const formatDraftPick = (pick: DraftPick) => {
     console.log(`\n🎯 Formatting ${pick.season} Round ${pick.round} pick`);
+    console.log(`📊 Available seasons in multiSeasonData:`, Object.keys(multiSeasonData));
     
     const currentYear = new Date().getFullYear();
     const pickYear = parseInt(pick.season);
@@ -220,6 +213,14 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     const standingsSeasonData = multiSeasonData[standingsYear];
     
     console.log(`📊 Pick season (${pick.season}): ${!!pickSeasonData}, Standings season (${standingsYear}): ${!!standingsSeasonData}`);
+    
+    if (pickSeasonData) {
+      console.log(`📊 Pick season data:`, {
+        rosters: pickSeasonData.rosters.length,
+        drafts: pickSeasonData.drafts.length,
+        draftPicks: Object.keys(pickSeasonData.draftPicks).length
+      });
+    }
     
     // Determine season status
     const isPastOrCurrentSeason = pickYear <= currentYear;
