@@ -244,7 +244,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     
     // For past/current seasons, try to find the drafted player
     if (isPastOrCurrentSeason && pickSeasonData) {
-      const draftedPlayer = findDraftedPlayerFromUnifiedData(pick, draftSlot);
+      const draftedPlayer = findDraftedPlayerFromExactSeason(pick, pickSeasonData);
       if (draftedPlayer) {
         result += ` (${draftedPlayer})`;
         console.log(`👤 Drafted player found: ${draftedPlayer}`);
@@ -294,73 +294,67 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     return rank;
   };
   
-  const findDraftedPlayerFromUnifiedData = (pick: DraftPick, draftSlot: string | null): string | null => {
+  const findDraftedPlayer = (pick: DraftPick, pickSeasonData: any, draftSlot: string | null): string | null => {
+    // CRITICAL: Only look for players in the EXACT same year as the pick
     const pickYear = parseInt(pick.season);
     const currentYear = new Date().getFullYear();
     
-    // Don't show players for future drafts
+    // If this is a future draft that hasn't occurred, don't show any player
     if (pickYear > currentYear) {
-      console.log(`🚫 ${pickYear} is future, no player available`);
+      console.log(`🚫 Pick is for ${pickYear}, which is in the future. No player available.`);
       return null;
     }
     
-    // Get drafts for the pick's season
-    const seasonDrafts = unifiedLeagueData.allDrafts[pick.season];
-    if (!seasonDrafts || !seasonDrafts.length) {
-      console.log(`❌ No drafts found for ${pick.season}`);
+    // Verify we have draft data for the EXACT pick season
+    if (!pickSeasonData || !pickSeasonData.drafts.length) {
+      console.log(`❌ No draft data found for pick season ${pick.season}`);
       return null;
     }
     
-    // Use the first draft (main draft)
-    const draft = seasonDrafts[0];
+    // Verify this draft data is actually from the pick's season
+    const draft = pickSeasonData.drafts[0];
     if (draft.season !== pick.season) {
-      console.log(`🚫 Draft season mismatch: expected ${pick.season}, got ${draft.season}`);
+      console.log(`🚫 Draft season mismatch: pick is ${pick.season}, draft is ${draft.season}`);
       return null;
     }
     
-    // Get draft picks for this draft
-    const draftPicks = unifiedLeagueData.allDraftPicks[draft.draft_id] || [];
+    const draftPicks = pickSeasonData.draftPicks[draft.draft_id] || [];
+    
     if (!draftPicks.length) {
-      console.log(`❌ No picks found for draft ${draft.draft_id}`);
+      console.log(`❌ No draft picks found for ${pick.season} draft`);
       return null;
     }
     
-    console.log(`🎯 Searching ${draftPicks.length} picks in ${pick.season} draft`);
-
     // Try to find by slot if we have it
     if (draftSlot) {
       const [roundStr, slotStr] = draftSlot.split('.');
       const targetRound = parseInt(roundStr);
       const targetSlot = parseInt(slotStr);
       
-      const totalTeams = unifiedLeagueData.allRosters[pick.season]?.length || 12;
+      // Find pick by round and slot position
+      const totalTeams = pickSeasonData.rosters.length;
       const targetPickNumber = (targetRound - 1) * totalTeams + targetSlot;
       
       const foundPick = draftPicks.find(p => p.pick_no === targetPickNumber);
       if (foundPick && foundPick.player_id) {
-        const playerName = getPlayerName(foundPick.player_id);
-        console.log(`✅ Found by slot: ${playerName}`);
-        return playerName;
+        return getPlayerName(foundPick.player_id);
       }
     }
     
-    // Fallback: find by owner and round
+    // Fallback: try to find by original owner and round
     const originalOwnerId = pick.owner_id || pick.previous_owner_id || pick.roster_id;
     if (originalOwnerId) {
-      const totalTeams = unifiedLeagueData.allRosters[pick.season]?.length || 12;
       const ownerPicksInRound = draftPicks.filter(p => 
         p.roster_id === originalOwnerId && 
-        Math.ceil(p.pick_no / totalTeams) === pick.round
+        Math.ceil(p.pick_no / pickSeasonData.rosters.length) === pick.round
       );
       
       if (ownerPicksInRound.length > 0 && ownerPicksInRound[0].player_id) {
-        const playerName = getPlayerName(ownerPicksInRound[0].player_id);
-        console.log(`✅ Found by owner+round: ${playerName}`);
-        return playerName;
+        return getPlayerName(ownerPicksInRound[0].player_id);
       }
     }
     
-    console.log(`❌ No player found for ${pick.season} R${pick.round}`);
+    console.log('❌ No drafted player found');
     return null;
   };
   
