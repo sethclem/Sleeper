@@ -80,7 +80,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     for (const season of seasonsNeeded) {
       try {
         const leagueIdForSeason = findLeagueIdForSeason(season);
-        console.log(`Loading data for season ${season}, league ID:`, leagueIdForSeason);
+        console.log(`🔄 Loading data for season ${season}, league ID:`, leagueIdForSeason);
         
         if (leagueIdForSeason) {
           const [rostersData, usersData, draftsData] = await Promise.all([
@@ -89,11 +89,25 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
             SleeperAPI.getLeagueDrafts(leagueIdForSeason)
           ]);
           
+          console.log(`📊 Raw data loaded for ${season}:`, {
+            rosters: rostersData.length,
+            users: usersData.length,
+            drafts: draftsData.length,
+            draftIds: draftsData.map(d => d.draft_id)
+          });
+          
           // Load draft picks for this season
           const seasonDraftPicks: Record<string, DraftPickDetail[]> = {};
           for (const draft of draftsData) {
-            const picks = await SleeperAPI.getDraftPicks(draft.draft_id);
-            seasonDraftPicks[draft.draft_id] = picks;
+            try {
+              console.log(`🎯 Loading draft picks for ${season} draft ${draft.draft_id}`);
+              const picks = await SleeperAPI.getDraftPicks(draft.draft_id);
+              seasonDraftPicks[draft.draft_id] = picks;
+              console.log(`✅ Loaded ${picks.length} picks for draft ${draft.draft_id}`);
+            } catch (error) {
+              console.error(`❌ Failed to load picks for draft ${draft.draft_id}:`, error);
+              seasonDraftPicks[draft.draft_id] = [];
+            }
           }
           
           crossSeasonDataMap[season] = {
@@ -103,17 +117,17 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
             draftPicks: seasonDraftPicks
           };
           
-          console.log(`Loaded ${season} season data:`, { 
+          console.log(`✅ Final ${season} season data:`, { 
             rosters: rostersData.length, 
             users: usersData.length,
             drafts: draftsData.length,
             totalPicks: Object.values(seasonDraftPicks).reduce((sum, picks) => sum + picks.length, 0)
           });
         } else {
-          console.warn(`Could not find league ID for season ${season}`);
+          console.error(`❌ Could not find league ID for season ${season}`);
         }
       } catch (error) {
-        console.error(`Failed to load data for season ${season}:`, error);
+        console.error(`❌ Failed to load data for season ${season}:`, error);
       }
     }
     
