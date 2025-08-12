@@ -244,7 +244,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     
     // For past/current seasons, try to find the drafted player
     if (isPastOrCurrentSeason && pickSeasonData) {
-      const draftedPlayer = findDraftedPlayerFromUnifiedData(pick, draftSlot);
+      const draftedPlayer = findDraftedPlayerFromUnifiedData(pick, draftSlot, pickSeasonData);
       if (draftedPlayer) {
         result += ` (${draftedPlayer})`;
         console.log(`👤 Drafted player found: ${draftedPlayer}`);
@@ -294,9 +294,11 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     return rank;
   };
   
-  const findDraftedPlayerFromUnifiedData = (pick: DraftPick, draftSlot: string | null): string | null => {
+  const findDraftedPlayerFromUnifiedData = (pick: DraftPick, draftSlot: string | null, pickSeasonData: any): string | null => {
     const pickYear = parseInt(pick.season);
     const currentYear = new Date().getFullYear();
+    
+    console.log(`🔍 Searching unified data for ${pick.season} draft pick`);
     
     // Don't show players for future drafts
     if (pickYear > currentYear) {
@@ -304,8 +306,8 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       return null;
     }
     
-    // Get drafts for the pick's season
-    const seasonDrafts = unifiedLeagueData.allDrafts[pick.season];
+    // Get drafts for the pick's season from multiSeasonData
+    const seasonDrafts = multiSeasonData[pick.season]?.drafts;
     if (!seasonDrafts || !seasonDrafts.length) {
       console.log(`❌ No drafts found for ${pick.season}`);
       return null;
@@ -318,8 +320,8 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       return null;
     }
     
-    // Get draft picks for this draft
-    const draftPicks = unifiedLeagueData.allDraftPicks[draft.draft_id] || [];
+    // Get draft picks for this draft from multiSeasonData
+    const draftPicks = multiSeasonData[pick.season]?.draftPicks[draft.draft_id] || [];
     if (!draftPicks.length) {
       console.log(`❌ No picks found for draft ${draft.draft_id}`);
       return null;
@@ -386,18 +388,73 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     // Get the draft from the pick's exact season
     const draft = pickSeasonData.drafts[0];
     
+    // CRITICAL: Only look for players in the EXACT same year as the pick
+    const pickYear = parseInt(pick.season);
+    const currentYear = new Date().getFullYear();
+    
+    // If this is a future draft that hasn't occurred, don't show any player
+    if (pickYear > currentYear) {
+      console.log(`🚫 Pick is for ${pickYear}, which is in the future. No player available.`);
+      console.log(`🚫 CRITICAL: Draft season mismatch! Pick: ${pick.season}, Draft: ${draft.season}`);
+      return null;
+    
+    // Verify we have draft data for the EXACT pick season
+    if (!pickSeasonData || !pickSeasonData.drafts.length) {
+      console.log(`❌ No draft data found for pick season ${pick.season}`);
+      return null;
+    }
+    
     // Verify this draft data is actually from the pick's season
+    // CRITICAL: Only look for players in the EXACT same year as the pick
+    const pickYear = parseInt(pick.season);
+    const currentYear = new Date().getFullYear();
+    
+    // If this is a future draft that hasn't occurred, don't show any player
+    if (pickYear > currentYear) {
+      console.log(`🚫 Pick is for ${pickYear}, which is in the future. No player available.`);
+      console.log(`🚫 Draft season mismatch: pick is ${pick.season}, draft is ${draft.season}`);
+      return null;
+    
+    // Verify we have draft data for the EXACT pick season
+    if (!pickSeasonData || !pickSeasonData.drafts.length) {
+      console.log(`❌ No draft data found for pick season ${pick.season}`);
+      return null;
+    }
+    
+    // Verify this draft data is actually from the pick's season
+    // CRITICAL: Only look for players in the EXACT same year as the pick
+    const pickYear = parseInt(pick.season);
+    const currentYear = new Date().getFullYear();
+    
+    // If this is a future draft that hasn't occurred, don't show any player
+    if (pickYear > currentYear) {
+      console.log(`🚫 Pick is for ${pickYear}, which is in the future. No player available.`);
+      console.log(`🚫 Draft season mismatch: pick is ${pick.season}, draft is ${draft.season}`);
+      return null;
+    
+    // Verify we have draft data for the EXACT pick season
+    if (!pickSeasonData || !pickSeasonData.drafts.length) {
+      console.log(`❌ No draft data found for pick season ${pick.season}`);
+      return null;
+    }
+    
+    // Verify this draft data is actually from the pick's season
+    const draft = pickSeasonData.drafts[0];
     if (draft.season !== pick.season) {
       console.log(`🚫 Draft season mismatch: pick is ${pick.season}, draft is ${draft.season}`);
       return null;
     }
-    
+    }
     const draftPicks = pickSeasonData.draftPicks[draft.draft_id] || [];
     
     if (!draftPicks.length) {
       console.log(`❌ No draft picks found for ${pick.season} draft`);
       return null;
     }
+    
+    const draftPicks = pickSeasonData.draftPicks[draft.draft_id] || [];
+    
+    
     
     console.log(`🎯 Searching ${draftPicks.length} picks from ${pick.season} draft`);
     
@@ -410,13 +467,12 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
         p.roster_id === originalOwnerId && 
         Math.ceil(p.pick_no / pickSeasonData.rosters.length) === pick.round
       );
-      
-      if (ownerPicksInRound.length > 0 && ownerPicksInRound[0].player_id) {
-        const playerName = getPlayerName(ownerPicksInRound[0].player_id);
-        console.log(`✅ Found by owner+round: ${playerName}`);
-        return playerName;
-      }
+    // Verify this draft data is actually from the pick's season
+    if (draft.season !== pick.season) {
+      console.log(`🚫 Draft season mismatch: pick is ${pick.season}, draft is ${draft.season}`);
+      return null;
     }
+    
     
     console.log(`❌ No player found in ${pick.season} draft`);
     return null;
