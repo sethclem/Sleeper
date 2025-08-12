@@ -58,14 +58,13 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     trades.forEach(trade => {
       (trade.draft_picks || []).forEach(pick => {
         seasonsNeeded.add(pick.season);
-        // Also need previous season for standings
-        const previousSeason = (parseInt(pick.season) - 1).toString();
-        seasonsNeeded.add(previousSeason);
+        // For draft order calculation, we need the previous season's standings
+        if (parseInt(pick.season) > 2018) { // Only if there's a valid previous season
+          const previousSeason = (parseInt(pick.season) - 1).toString();
+          seasonsNeeded.add(previousSeason);
+        }
       });
     });
-    
-    // Always include current season as fallback
-    seasonsNeeded.add(league.mostRecentSeason.season);
     
     console.log('Seasons needed for cross-season analysis:', Array.from(seasonsNeeded));
     
@@ -121,37 +120,24 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
   };
   
   const findLeagueIdForSeason = (season: string): string | null => {
-    // Find the league ID for a specific season within the consolidated league
     try {
+      console.log(`Finding league ID for season ${season}...`);
+      console.log('Available seasons in consolidated league:', league.seasons.map(s => ({ season: s.season, league_id: s.league_id })));
+      
       const targetSeason = league.seasons.find(s => s.season === season);
       if (targetSeason) {
         console.log(`Found league ID for season ${season}:`, targetSeason.league_id);
         return targetSeason.league_id;
       }
       
-      // If not found in consolidated league, try current league for current season
-      const currentSeason = league.mostRecentSeason.season;
-      if (season === currentSeason) {
-        return league.mostRecentSeason.league_id;
-      }
-      
-      // Try to find using previous_league_id chain for adjacent seasons
+      // For seasons not in consolidated league, try to traverse the league chain
       const currentYear = parseInt(currentSeason);
       const targetYear = parseInt(season);
       
-      // For previous seasons, try to find in consolidated league
-      if (targetYear < currentYear) {
-        const previousSeason = league.seasons.find(s => parseInt(s.season) === targetYear);
-        if (previousSeason) {
-          console.log(`Found previous season ${season} in consolidated league:`, previousSeason.league_id);
-          return previousSeason.league_id;
-        }
-        
-        // Try using previous_league_id from current season
-        if (targetYear === currentYear - 1 && league.mostRecentSeason.previous_league_id) {
-          console.log(`Using previous_league_id for ${season}:`, league.mostRecentSeason.previous_league_id);
-          return league.mostRecentSeason.previous_league_id;
-        }
+      // For adjacent seasons, try using previous_league_id
+      if (targetYear === currentYear - 1 && league.mostRecentSeason.previous_league_id) {
+        console.log(`Using previous_league_id for ${season}:`, league.mostRecentSeason.previous_league_id);
+        return league.mostRecentSeason.previous_league_id;
       }
       
       console.warn(`Could not find league ID for season ${season}`);
@@ -178,38 +164,32 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     console.log('Formatting draft pick:', {
       season: pickSeason,
       round: pick.round,
-      original_owner: pick.original_owner || pick.previous_owner_id,
+      original_owner: pick.original_owner,
+      previous_owner_id: pick.previous_owner_id,
       owner_id: pick.owner_id,
-      previous_owner_id: pick.previous_owner_id
     });
     
     const originalOwnerId = pick.original_owner || pick.previous_owner_id;
     const roundSuffix = pick.round === 1 ? 'st' : pick.round === 2 ? 'nd' : pick.round === 3 ? 'rd' : 'th';
     
-    // Get data for the pick season and previous season
+    // Get data for the pick season (for draft results) and previous season (for standings/draft order)
     const pickSeasonData = crossSeasonData[pickSeason];
     const previousSeason = (parseInt(pickSeason) - 1).toString();
     const previousSeasonData = crossSeasonData[previousSeason];
     
     console.log(`Data availability for ${pickSeason} pick:`, {
       pickSeasonData: !!pickSeasonData,
+      pickSeasonRosters: pickSeasonData?.rosters?.length || 0,
+      pickSeasonDrafts: pickSeasonData?.drafts?.length || 0,
       previousSeason,
       previousSeasonData: !!previousSeasonData,
-      originalOwnerId
+      previousSeasonRosters: previousSeasonData?.rosters?.length || 0,
     });
     
-    // Fallback: if no previous season data, try to use current season data
-    let standingsData = previousSeasonData;
-    let standingsSource = previousSeason;
-    
-    if (!previousSeasonData) {
-      // Try current season as fallback
-      const currentSeasonData = crossSeasonData[league.mostRecentSeason.season];
-      if (currentSeasonData) {
-        standingsData = currentSeasonData;
-        standingsSource = league.mostRecentSeason.season;
-        console.log(`Using ${standingsSource} season data as fallback for standings`);
-      }
+    // We need previous season data for draft order calculation
+    if (!previousSeasonData || !previousSeasonData.rosters.length) {
+      console.warn(`No previous season (${previousSeason}) data available for draft order calculation`);
+      return `${pickSeason} ${pick.round}${roundSuffix} Round Pick`;
     }
     
     // Find the original owner's info and calculate pick number
@@ -217,21 +197,21 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     let inferredPickNumber = '';
     let selectedPlayer = '';
     
-    if (standingsData && originalOwnerId) {
-      // Find the original owner in the previous season to get their final rank
-      const originalRoster = standingsData.rosters.find(r => r.roster_id === originalOwnerId);
-      console.log(`Original roster found in ${standingsSource} season:`, !!originalRoster, originalRoster?.roster_id);
+    if (originalOwnerId) {
+      // Find the original owner in the previous season to get their final rank for draft order
+      const originalRoster = previousSeasonData.rosters.find(r => r.roster_id === originalOwnerId);
+      console.log(`Original roster found in ${previousSeason} season:`, !!originalRoster, originalRoster?.roster_id);
       
       if (originalRoster) {
-        const originalUser = standingsData.users.find(u => u.user_id === originalRoster.owner_id);
+        const originalUser = previousSeasonData.users.find(u => u.user_id === originalRoster.owner_id);
         console.log('Original user found:', !!originalUser, originalUser?.username);
         
         if (originalUser) {
           originalOwnerName = originalUser.display_name || originalUser.username;
           
           // Calculate final rank and infer pick number
-          const finalRank = calculateRankFromRecord(originalRoster, standingsData.rosters);
-          const totalTeams = standingsData.rosters.length;
+          const finalRank = calculateRankFromRecord(originalRoster, previousSeasonData.rosters);
+          const totalTeams = previousSeasonData.rosters.length;
           const pickInRound = totalTeams - finalRank + 1;
           inferredPickNumber = `${pick.round}.${pickInRound.toString().padStart(2, '0')}`;
           
@@ -240,15 +220,13 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
             totalTeams,
             pickInRound,
             inferredPickNumber,
-            standingsSource
+            basedOnSeason: previousSeason
           });
         }
       }
-    } else {
-      console.warn(`No standings data available for pick calculation. standingsData: ${!!standingsData}, originalOwnerId: ${originalOwnerId}`);
     }
     
-    // Check if the draft for this pick season has occurred
+    // Check if the draft for this pick season has occurred and find the selected player
     if (pickSeasonData && pickSeasonData.drafts.length > 0 && inferredPickNumber) {
       const draft = pickSeasonData.drafts[0]; // Assume first draft is the main draft
       const draftPicksForSeason = pickSeasonData.draftPicks[draft.draft_id] || [];
@@ -264,7 +242,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
         const [roundStr, pickInRoundStr] = inferredPickNumber.split('.');
         const roundNum = parseInt(roundStr);
         const pickInRound = parseInt(pickInRoundStr);
-        const totalTeams = pickSeasonData.rosters.length;
+        const totalTeams = previousSeasonData.rosters.length; // Use previous season for team count
         const overallPickNumber = ((roundNum - 1) * totalTeams) + pickInRound;
         
         console.log('Looking for overall pick number:', overallPickNumber);
@@ -275,6 +253,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
         
         if (selectedPick && selectedPick.player_id) {
           selectedPlayer = getPlayerName(selectedPick.player_id);
+          console.log(`Selected player: ${selectedPlayer}`);
         } else {
           console.log(`No player found for pick ${overallPickNumber}, selectedPick:`, selectedPick);
           console.log(`Available pick numbers:`, draftPicksForSeason.map(p => p.pick_no).sort((a, b) => a - b));
