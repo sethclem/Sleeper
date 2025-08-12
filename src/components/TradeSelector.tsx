@@ -339,6 +339,8 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       
       const received: string[] = [];
       const sent: string[] = [];
+      const receivedPicks: string[] = [];
+      const sentPicks: string[] = [];
       
       // Find players this roster received (in adds)
       Object.entries(trade.adds || {}).forEach(([playerId, toRosterId]) => {
@@ -354,20 +356,30 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
         }
       });
       
+      // Find draft picks this roster received
+      (trade.draft_picks || []).forEach(pick => {
+        if (pick.roster_id === rosterId) {
+          receivedPicks.push(formatDraftPick(pick));
+        }
+      });
+      
+      // Find draft picks this roster sent
+      (trade.draft_picks || []).forEach(pick => {
+        if (pick.previous_owner_id === rosterId) {
+          sentPicks.push(formatDraftPick(pick));
+        }
+      });
+      
       tradeDetails.push({
         user,
         received,
-      // Future season - draft hasn't occurred yet, show calculated position
-      // Find who sent the pick
-      const sender = tradeDetails.find(d => getUserByRosterId(pick.previous_owner_id)?.user_id === d.user.user_id);
-      if (sender) {
-        sender.sentPicks.push(formatDraftPick(pick));
-      }
+        sent,
+        receivedPicks,
+        sentPicks
+      });
     });
 
     return tradeDetails;
-    
-    return `${pick.season} ${pick.round}${roundSuffix} Round Pick`;
   };
 
   return (
