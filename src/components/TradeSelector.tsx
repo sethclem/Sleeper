@@ -36,12 +36,12 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
   const [seasonToLeagueId, setSeasonToLeagueId] = useState<Record<string, string>>({});
 
   React.useEffect(() => {
-    loadMultiSeasonData();
+    if (!dataLoaded) {
+      loadMultiSeasonData();
+    }
   }, [leagueId]);
 
   const loadMultiSeasonData = async () => {
-    if (dataLoaded) return;
-    
     try {
       console.log('🚀 Loading multi-season data for trades...');
       
