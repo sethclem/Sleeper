@@ -1,164 +1,540 @@
 import React, { useState } from 'react';
-import { Search, Users, Trophy, Calendar } from 'lucide-react';
+import { Calendar, Users, ArrowRight } from 'lucide-react';
+import { SleeperTrade, SleeperUser, SleeperRoster, PlayerInfo, DraftPick, DraftInfo, DraftPickDetail, ConsolidatedLeague } from '../types/sleeper';
 import { SleeperAPI } from '../services/sleeperApi';
-import { SleeperUser, SleeperLeague, ConsolidatedLeague } from '../types/sleeper';
 
-interface LeagueSelectorProps {
-  onLeagueSelect: (consolidatedLeague: ConsolidatedLeague) => void;
+interface TradeSelectorProps {
+  trades: SleeperTrade[];
+  users: SleeperUser[];
+  rosters: SleeperRoster[];
+  players: Record<string, PlayerInfo>;
+  selectedTrades: string[];
+  onSelectionChange: (tradeIds: string[]) => void;
+  leagueId: string;
+  league: ConsolidatedLeague;
 }
 
-export const LeagueSelector: React.FC<LeagueSelectorProps> = ({ onLeagueSelect }) => {
-  const [username, setUsername] = useState('');
-  const [user, setUser] = useState<SleeperUser | null>(null);
-  const [consolidatedLeagues, setConsolidatedLeagues] = useState<ConsolidatedLeague[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+export const TradeSelector: React.FC<TradeSelectorProps> = ({
+  trades,
+  users,
+  rosters,
+  players,
+  selectedTrades,
+  onSelectionChange,
+  leagueId,
+  league
+}) => {
+  const [multiSeasonData, setMultiSeasonData] = useState<Record<string, {
+    rosters: SleeperRoster[];
+    users: SleeperUser[];
+    drafts: DraftInfo[];
+    draftPicks: Record<string, DraftPickDetail[]>;
+    leagueId: string;
+    seasonComplete: boolean;
+  }>>({});
+  const [dataLoaded, setDataLoaded] = useState(false);
+  const [seasonToLeagueId, setSeasonToLeagueId] = useState<Record<string, string>>({});
 
-  const handleSearch = async () => {
-    if (!username.trim()) return;
-    
-    setLoading(true);
-    setError('');
+  React.useEffect(() => {
+    loadMultiSeasonData();
+  }, [leagueId]);
+
+  const loadMultiSeasonData = async () => {
+    if (dataLoaded) return;
     
     try {
-      const userData = await SleeperAPI.getUser(username.trim());
-      if (!userData) {
-        setError('User not found. Please check the username.');
-        setUser(null);
-        setConsolidatedLeagues([]);
-        return;
-      }
+      console.log('🚀 Loading multi-season data for trades...');
       
-      setUser(userData);
-      const userLeagues = await SleeperAPI.getUserLeagues(userData.user_id);
-      const nflLeagues = userLeagues.filter(league => league.sport === 'nfl');
-      const consolidated = SleeperAPI.consolidateLeagues(nflLeagues);
-      setConsolidatedLeagues(consolidated);
-    } catch (err) {
-      setError('Failed to fetch user data. Please try again.');
-    } finally {
-      setLoading(false);
+      // Build season to league ID mapping
+      const seasonMapping = buildSeasonToLeagueIdMapping();
+      setSeasonToLeagueId(seasonMapping);
+      
+      // Identify all seasons needed for trades
+      const seasonsNeeded = identifySeasonsNeededForTrades();
+      console.log('📅 Seasons needed:', Array.from(seasonsNeeded).sort());
+      
+      // Load data for each season
+      const multiSeasonDataMap = await loadDataForSeasons(seasonsNeeded, seasonMapping);
+      setMultiSeasonData(multiSeasonDataMap);
+      
+      setDataLoaded(true);
+      console.log('✅ Multi-season data loading complete');
+    } catch (error) {
+      console.error('❌ Error loading multi-season data:', error);
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSearch();
+  const buildSeasonToLeagueIdMapping = (): Record<string, string> => {
+    const mapping: Record<string, string> = {};
+    
+    // Map each season to its league ID
+    league.seasons.forEach(season => {
+      mapping[season.season] = season.league_id;
+    });
+    
+    // For seasons not in our league history, try to infer
+    const currentYear = new Date().getFullYear();
+    const mostRecentSeason = league.mostRecentSeason;
+    
+    // For future seasons, use the most recent league ID
+    for (let year = parseInt(mostRecentSeason.season) + 1; year <= currentYear + 5; year++) {
+      if (!mapping[year.toString()]) {
+        mapping[year.toString()] = mostRecentSeason.league_id;
+      }
     }
+    
+    // For past seasons, try to use previous_league_id chain
+    league.seasons.forEach(season => {
+      if (season.previous_league_id) {
+        const previousYear = (parseInt(season.season) - 1).toString();
+        if (!mapping[previousYear] && parseInt(previousYear) >= 2018) {
+          mapping[previousYear] = season.previous_league_id;
+        }
+      }
+    });
+    
+    return mapping;
+  };
+  
+  const identifySeasonsNeededForTrades = (): Set<string> => {
+    const seasonsNeeded = new Set<string>();
+    
+    trades.forEach(trade => {
+      (trade.draft_picks || []).forEach(pick => {
+        // Need the pick's season for draft results
+        seasonsNeeded.add(pick.season);
+        
+        // Need the previous season for standings (draft order)
+        const previousSeason = (parseInt(pick.season) - 1).toString();
+        if (parseInt(previousSeason) >= 2018) {
+          seasonsNeeded.add(previousSeason);
+        }
+      });
+    });
+    
+    return seasonsNeeded;
+  };
+  
+  const loadDataForSeasons = async (
+    seasonsNeeded: Set<string>, 
+    seasonMapping: Record<string, string>
+  ): Promise<Record<string, {
+    rosters: SleeperRoster[];
+    users: SleeperUser[];
+    drafts: DraftInfo[];
+    draftPicks: Record<string, DraftPickDetail[]>;
+    leagueId: string;
+    seasonComplete: boolean;
+  }>> => {
+    const dataMap: Record<string, any> = {};
+    const currentYear = new Date().getFullYear();
+    
+    for (const season of seasonsNeeded) {
+      const leagueIdForSeason = seasonMapping[season];
+      if (!leagueIdForSeason) {
+        console.warn(`❌ No league ID found for season ${season}`);
+        continue;
+      }
+      
+      try {
+        console.log(`📅 Loading season ${season} (League ID: ${leagueIdForSeason})`);
+        
+        const [rostersData, usersData, draftsData] = await Promise.all([
+          SleeperAPI.getLeagueRosters(leagueIdForSeason),
+          SleeperAPI.getLeagueUsers(leagueIdForSeason),
+          SleeperAPI.getLeagueDrafts(leagueIdForSeason)
+        ]);
+        
+        // Load draft picks for all drafts in this season
+        const seasonDraftPicks: Record<string, DraftPickDetail[]> = {};
+        for (const draft of draftsData) {
+          try {
+            const picks = await SleeperAPI.getDraftPicks(draft.draft_id);
+            seasonDraftPicks[draft.draft_id] = picks;
+          } catch (error) {
+            console.warn(`⚠️ Failed to load picks for draft ${draft.draft_id}:`, error);
+            seasonDraftPicks[draft.draft_id] = [];
+          }
+        }
+        
+        // Determine if season is complete
+        const seasonYear = parseInt(season);
+        const seasonComplete = seasonYear < currentYear || 
+          (seasonYear === currentYear && isSeasonComplete(season));
+        
+        dataMap[season] = {
+          rosters: rostersData,
+          users: usersData,
+          drafts: draftsData,
+          draftPicks: seasonDraftPicks,
+          leagueId: leagueIdForSeason,
+          seasonComplete
+        };
+        
+        const totalPicks = Object.values(seasonDraftPicks).reduce((sum, picks) => sum + picks.length, 0);
+        console.log(`✅ ${season}: ${rostersData.length} teams, ${draftsData.length} drafts, ${totalPicks} picks, complete: ${seasonComplete}`);
+        
+      } catch (error) {
+        console.error(`❌ Failed to load season ${season}:`, error);
+      }
+    }
+    
+    return dataMap;
+  };
+  
+  const isSeasonComplete = (season: string): boolean => {
+    // This is a simplified check - in reality you'd check if playoffs are done
+    // For now, assume current season is not complete unless it's past seasons
+    const currentYear = new Date().getFullYear();
+    const seasonYear = parseInt(season);
+    return seasonYear < currentYear;
+  };
+
+  const getUserById = (userId: string) => {
+    return users.find(user => user.user_id === userId);
+  };
+
+  const getPlayerName = (playerId: string) => {
+    const player = players[playerId];
+    if (!player) return `Player ${playerId}`;
+    return `${player.full_name} (${player.position})`;
+  };
+
+  const formatDraftPick = (pick: DraftPick) => {
+    console.log(`\n🎯 Formatting ${pick.season} Round ${pick.round} pick`);
+    
+    const currentYear = new Date().getFullYear();
+    const pickYear = parseInt(pick.season);
+    const standingsYear = (pickYear - 1).toString();
+    
+    // Get data for both seasons - CRITICAL: Use pick.season for draft data
+    const pickSeasonData = multiSeasonData[pick.season];  // This should have 2025 draft data
+    const standingsSeasonData = multiSeasonData[standingsYear];
+    
+    console.log(`📊 Pick season (${pick.season}): ${!!pickSeasonData}, Standings season (${standingsYear}): ${!!standingsSeasonData}`);
+    
+    if (pickSeasonData) {
+      console.log(`📊 Pick season data for ${pick.season}:`, {
+        drafts: pickSeasonData.drafts.length,
+        draftIds: pickSeasonData.drafts.map(d => `${d.draft_id} (${d.season})`),
+        totalPicks: Object.values(pickSeasonData.draftPicks).reduce((sum, picks) => sum + picks.length, 0)
+      });
+    }
+    
+    // Determine season status
+    const isPastOrCurrentSeason = pickYear <= currentYear;
+    const standingsSeasonComplete = standingsSeasonData?.seasonComplete || false;
+    
+    // Base format
+    const roundSuffix = pick.round === 1 ? 'st' : pick.round === 2 ? 'nd' : pick.round === 3 ? 'rd' : 'th';
+    let result = `${pick.season} ${pick.round}${roundSuffix} Round Pick`;
+    
+    // If we don't have standings data or season isn't complete, return basic format
+    if (!standingsSeasonData || !standingsSeasonComplete) {
+      console.log(`⏸️ Standings season ${standingsYear} not complete or no data available`);
+      return result;
+    }
+    
+    // Calculate draft slot from standings
+    const draftSlot = calculateDraftSlot(pick, standingsSeasonData);
+    if (draftSlot) {
+      result += ` ${draftSlot}`;
+      console.log(`📍 Draft slot calculated: ${draftSlot}`);
+    }
+    
+    // For past/current seasons, try to find the drafted player
+    if (isPastOrCurrentSeason && pickSeasonData) {
+      const draftedPlayer = findDraftedPlayerFromExactSeason(pick, pickSeasonData);
+      if (draftedPlayer) {
+        result += ` (${draftedPlayer})`;
+        console.log(`👤 Drafted player found: ${draftedPlayer}`);
+      }
+    }
+    
+    console.log(`✅ Final format: ${result}`);
+    return result;
+  };
+  
+  const calculateDraftSlot = (pick: DraftPick, standingsData: any): string | null => {
+    const originalOwnerId = pick.owner_id || pick.previous_owner_id || pick.roster_id;
+    if (!originalOwnerId) {
+      console.warn('❌ No original owner ID found for pick');
+      return null;
+    }
+    
+    // Find the roster in standings data
+    const originalRoster = standingsData.rosters.find((r: SleeperRoster) => r.roster_id === originalOwnerId);
+    if (!originalRoster) {
+      console.warn(`❌ Original roster ${originalOwnerId} not found in standings`);
+      return null;
+    }
+    
+    // Calculate final rank
+    const finalRank = calculateFinalRank(originalRoster, standingsData.rosters);
+    const roundNum = pick.round;
+    const slotNum = finalRank.toString().padStart(2, '0');
+    
+    return `${roundNum}.${slotNum}`;
+  };
+  
+  const calculateFinalRank = (roster: SleeperRoster, allRosters: SleeperRoster[]): number => {
+    // Sort rosters by wins (desc), then by points for (desc)
+    const sortedRosters = [...allRosters].sort((a, b) => {
+      const aWins = a.settings.wins || 0;
+      const bWins = b.settings.wins || 0;
+      if (bWins !== aWins) return bWins - aWins;
+      
+      const aPoints = a.settings.fpts || 0;
+      const bPoints = b.settings.fpts || 0;
+      return bPoints - aPoints;
+    });
+    
+    // Find rank (1-based)
+    const rank = sortedRosters.findIndex(r => r.roster_id === roster.roster_id) + 1;
+    return rank;
+  };
+  
+  const findDraftedPlayerFromExactSeason = (pick: DraftPick, pickSeasonData: any): string | null => {
+    // CRITICAL: Only look for players in the EXACT same year as the pick
+    const pickYear = parseInt(pick.season);
+    const currentYear = new Date().getFullYear();
+    
+    console.log(`🔍 Searching for player in ${pick.season} draft only`);
+    
+    // If this is a future draft, absolutely no player should be shown
+    if (pickYear > currentYear) {
+      console.log(`🚫 Pick is for ${pickYear}, which is in the future. No player available.`);
+      return null;
+    }
+    
+    // Verify we have draft data for the EXACT pick season
+    if (!pickSeasonData || !pickSeasonData.drafts.length) {
+      console.log(`❌ No draft data found for pick season ${pick.season}`);
+      return null;
+    }
+    
+    // Get the draft from the pick's exact season
+    const draft = pickSeasonData.drafts[0];
+    
+    // CRITICAL: Only look for players in the EXACT same year as the pick
+    const pickYear = parseInt(pick.season);
+    const currentYear = new Date().getFullYear();
+    
+    // If this is a future draft that hasn't occurred, don't show any player
+    if (pickYear > currentYear) {
+      console.log(`🚫 Pick is for ${pickYear}, which is in the future. No player available.`);
+      console.log(`🚫 Draft season mismatch: pick is ${pick.season}, draft is ${draft.season}`);
+      return null;
+    
+    // Verify we have draft data for the EXACT pick season
+    if (!pickSeasonData || !pickSeasonData.drafts.length) {
+      console.log(`❌ No draft data found for pick season ${pick.season}`);
+      return null;
+    }
+    
+    // Verify this draft data is actually from the pick's season
+    const draft = pickSeasonData.drafts[0];
+    if (draft.season !== pick.season) {
+      console.log(`🚫 Draft season mismatch: pick is ${pick.season}, draft is ${draft.season}`);
+      return null;
+    }
+    }
+    const draftPicks = pickSeasonData.draftPicks[draft.draft_id] || [];
+    
+    if (!draftPicks.length) {
+      console.log(`❌ No draft picks found for ${pick.season} draft`);
+      return null;
+    }
+    
+    
+    console.log(`🎯 Searching ${draftPicks.length} picks from ${pick.season} draft`);
+    
+    // Find by original owner and round
+    const originalOwnerId = pick.owner_id || pick.previous_owner_id || pick.roster_id;
+    console.log(`🔍 Looking for owner ${originalOwnerId} in round ${pick.round}`);
+    
+    if (originalOwnerId) {
+      const ownerPicksInRound = draftPicks.filter(p => 
+        p.roster_id === originalOwnerId && 
+        Math.ceil(p.pick_no / pickSeasonData.rosters.length) === pick.round
+      );
+      
+      if (ownerPicksInRound.length > 0 && ownerPicksInRound[0].player_id) {
+        const playerName = getPlayerName(ownerPicksInRound[0].player_id);
+        console.log(`✅ Found player: ${playerName} (Pick ${ownerPicksInRound[0].pick_no})`);
+        return playerName;
+      }
+    }
+    
+    console.log(`❌ No player found in ${pick.season} draft`);
+    return null;
+  };
+
+  const formatTradeDate = (timestamp: number) => {
+    return new Date(timestamp).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  const handleTradeToggle = (tradeId: string) => {
+    const newSelected = selectedTrades.includes(tradeId)
+      ? selectedTrades.filter(id => id !== tradeId)
+      : [...selectedTrades, tradeId];
+    onSelectionChange(newSelected);
+  };
+
+  const getUserByRosterId = (rosterId: number) => {
+    // Find the roster first, then get the user
+    const roster = rosters.find(r => r.roster_id === rosterId);
+    if (!roster) return null;
+    return users.find(user => user.user_id === roster.owner_id);
+  };
+
+  const getTradeDetails = (trade: SleeperTrade) => {
+    const tradeDetails: Array<{
+      user: SleeperUser;
+      received: string[];
+      sent: string[];
+      receivedPicks: string[];
+      sentPicks: string[];
+    }> = [];
+    
+    // Process each roster involved in the trade
+    trade.roster_ids.forEach(rosterId => {
+      const user = getUserByRosterId(rosterId);
+      if (!user) return;
+      
+      const received: string[] = [];
+      const sent: string[] = [];
+      const receivedPicks: string[] = [];
+      const sentPicks: string[] = [];
+      
+      // Find players this roster received (in adds)
+      Object.entries(trade.adds || {}).forEach(([playerId, toRosterId]) => {
+        if (toRosterId === rosterId) {
+          received.push(getPlayerName(playerId));
+        }
+      });
+      
+      // Find players this roster sent (in drops)
+      Object.entries(trade.drops || {}).forEach(([playerId, fromRosterId]) => {
+        if (fromRosterId === rosterId) {
+          sent.push(getPlayerName(playerId));
+        }
+      });
+      
+      // Find draft picks this roster received
+      (trade.draft_picks || []).forEach(pick => {
+        if (pick.roster_id === rosterId) {
+          receivedPicks.push(formatDraftPick(pick));
+        }
+      });
+      
+      // Find draft picks this roster sent
+      (trade.draft_picks || []).forEach(pick => {
+        if (pick.previous_owner_id === rosterId) {
+          sentPicks.push(formatDraftPick(pick));
+        }
+      });
+      
+      tradeDetails.push({
+        user,
+        received,
+        sent,
+        receivedPicks,
+        sentPicks
+      });
+    });
+
+    return tradeDetails;
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-sleeper-dark via-gray-900 to-sleeper-gray flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center mb-4">
-            <Trophy className="w-12 h-12 text-sleeper-primary mr-3" />
-            <h1 className="text-4xl font-bold text-white">Sleeper Dashboard</h1>
-          </div>
-          <p className="text-gray-300 text-lg">Connect to your fantasy football league</p>
-        </div>
-
-        <div className="card p-8">
-          <div className="mb-6">
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
-              Sleeper Username
-            </label>
-            <div className="flex gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  id="username"
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Enter your Sleeper username"
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sleeper-primary focus:border-transparent outline-none transition-all"
-                  disabled={loading}
-                />
-              </div>
-              <button
-                onClick={handleSearch}
-                disabled={loading || !username.trim()}
-                className="btn-primary px-6 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? 'Searching...' : 'Search'}
-              </button>
-            </div>
-          </div>
-
-          {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-600">{error}</p>
-            </div>
-          )}
-
-          {user && (
-            <div className="mb-6 p-4 bg-sleeper-primary/10 border border-sleeper-primary/20 rounded-lg">
-              <div className="flex items-center">
-                <div className="w-12 h-12 bg-sleeper-primary rounded-full flex items-center justify-center text-white font-bold text-lg mr-4">
-                  {user.display_name?.[0] || user.username[0].toUpperCase()}
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">
-                    {user.display_name || user.username}
-                  </h3>
-                  <p className="text-gray-600">@{user.username}</p>
+    <div className="space-y-3">
+      {trades.map((trade) => {
+        const isSelected = selectedTrades.includes(trade.transaction_id);
+        const tradeDetails = getTradeDetails(trade);
+        
+        return (
+          <div
+            key={trade.transaction_id}
+            className={`border rounded-lg transition-all ${
+              isSelected ? 'border-sleeper-primary bg-sleeper-primary/5' : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <div className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => handleTradeToggle(trade.transaction_id)}
+                    className="w-4 h-4 text-sleeper-primary border-gray-300 rounded focus:ring-sleeper-primary"
+                  />
+                  <div>
+                    <div className="flex items-center space-x-2 text-sm font-medium text-gray-900">
+                      <Calendar className="w-4 h-4 text-gray-400" />
+                      <span>Week {trade.week}</span>
+                      <span className="text-gray-400">•</span>
+                      <span>{formatTradeDate(trade.status_updated)}</span>
+                    </div>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <Users className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm text-gray-600">
+                        {tradeDetails.map(detail => detail.user.display_name || detail.user.username).join(' ↔ ')}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
 
-          {consolidatedLeagues.length > 0 && (
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                <Users className="w-5 h-5 mr-2" />
-                Select a League ({consolidatedLeagues.length} found)
-              </h3>
-              <div className="space-y-3">
-                {consolidatedLeagues.map((consolidatedLeague) => (
-                  <button
-                    key={consolidatedLeague.name}
-                    onClick={() => onLeagueSelect(consolidatedLeague)}
-                    className="w-full p-4 border border-gray-200 rounded-lg hover:border-sleeper-primary hover:bg-sleeper-primary/5 transition-all text-left group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-semibold text-gray-900 group-hover:text-sleeper-primary transition-colors">
-                          {consolidatedLeague.name}
-                        </h4>
-                        <div className="flex items-center text-sm text-gray-600 mt-1 space-x-4">
-                          <span className="flex items-center">
-                            <Users className="w-4 h-4 mr-1" />
-                            {consolidatedLeague.mostRecentSeason.total_rosters} teams
-                          </span>
-                          <span className="flex items-center">
-                            <Calendar className="w-4 h-4 mr-1" />
-                            {consolidatedLeague.totalSeasons} season{consolidatedLeague.totalSeasons !== 1 ? 's' : ''}
-                          </span>
-                          <span className="capitalize px-2 py-1 bg-gray-100 rounded text-xs">
-                            {consolidatedLeague.mostRecentSeason.status}
-                          </span>
-                        </div>
+              {/* Always show trade details */}
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Trade Details</h4>
+                <div className="space-y-3">
+                  {tradeDetails.map((details, index) => (
+                    <div key={index} className="bg-gray-50 rounded-lg p-3">
+                      <div className="font-medium text-gray-900 mb-2">
+                        {details.user.display_name || details.user.username}
                       </div>
-                      <div className="text-sleeper-primary opacity-0 group-hover:opacity-100 transition-opacity">
-                        →
+                      <div className="space-y-2 text-sm">
+                        {(details.received.length > 0 || details.receivedPicks.length > 0) && (
+                          <div>
+                            <span className="text-green-600 font-medium">Receives:</span>
+                            <div className="ml-2 mt-1">
+                              {details.received.map((player, idx) => (
+                                <div key={idx} className="text-gray-700">• {player}</div>
+                              ))}
+                              {details.receivedPicks.map((pick, idx) => (
+                                <div key={`pick-${idx}`} className="text-gray-700">• {pick}</div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {(details.sent.length > 0 || details.sentPicks.length > 0) && (
+                          <div>
+                            <span className="text-red-600 font-medium">Sends:</span>
+                            <div className="ml-2 mt-1">
+                              {details.sent.map((player, idx) => (
+                                <div key={idx} className="text-gray-700">• {player}</div>
+                              ))}
+                              {details.sentPicks.map((pick, idx) => (
+                                <div key={`pick-${idx}`} className="text-gray-700">• {pick}</div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  </button>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
-          )}
-
-          {user && consolidatedLeagues.length === 0 && !loading && (
-            <div className="text-center py-8">
-              <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-600">No NFL leagues found.</p>
-            </div>
-          )}
-        </div>
-      </div>
+          </div>
+        );
+      })}
     </div>
   );
 };
