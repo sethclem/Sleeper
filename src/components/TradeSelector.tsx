@@ -36,12 +36,12 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
   const [seasonToLeagueId, setSeasonToLeagueId] = useState<Record<string, string>>({});
 
   React.useEffect(() => {
-    if (!dataLoaded) {
-      loadMultiSeasonData();
-    }
+    loadMultiSeasonData();
   }, [leagueId]);
 
   const loadMultiSeasonData = async () => {
+    if (dataLoaded) return;
+    
     try {
       console.log('🚀 Loading multi-season data for trades...');
       
@@ -98,6 +98,7 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
   
   const identifySeasonsNeededForTrades = (): Set<string> => {
     const seasonsNeeded = new Set<string>();
+    const currentYear = new Date().getFullYear();
     
     trades.forEach(trade => {
       (trade.draft_picks || []).forEach(pick => {
@@ -111,6 +112,13 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
         }
       });
     });
+    
+    // Also add common seasons that might be referenced
+    for (let year = 2018; year <= currentYear + 2; year++) {
+      if (league.seasons.some(s => parseInt(s.season) === year)) {
+        seasonsNeeded.add(year.toString());
+      }
+    }
     
     return seasonsNeeded;
   };
