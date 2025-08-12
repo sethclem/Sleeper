@@ -179,6 +179,15 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     const isCurrentSeason = pickYear === currentYear;
     const isFutureSeason = pickYear > currentYear;
     const standingsData = crossSeasonData[standingsYear.toString()];
+    // Check if the standings season has occurred (completed)
+    const standingsSeasonHasOccurred = standingsYear < currentYear || 
+      (standingsYear === currentYear && isSeasonComplete());
+    
+    if (!standingsSeasonHasOccurred) {
+      console.log(`⏸️ Standings season ${standingsYear} has not occurred/completed yet`);
+      return `${pick.season} ${pick.round}${roundSuffix} Round Pick`;
+    }
+    
     // Get draft data from the pick year
     const draftData = crossSeasonData[pick.season];
     
@@ -237,6 +246,12 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       console.log(`⏳ Future pick, showing position: ${draftPosition}`);
       return `${pick.season} ${pick.round}${roundSuffix} Round Pick (${draftPosition})`;
     }
+  };
+  
+  const isSeasonComplete = () => {
+    // This is a simplified check - in reality you'd check if playoffs are done
+    // For now, assume current season is not complete
+    return false;
   };
   
   const findDraftedPlayer = (draftData: any, draftPosition: string, totalTeams: number): string | null => {
