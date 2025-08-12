@@ -203,14 +203,14 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     }
     
     if (originalOwnerId) {
-        if (draftResult && draftResult.player && draftResult.position) {
+      const originalRoster = standingsData.rosters.find(r => r.roster_id === originalOwnerId);
       if (originalRoster) {
         const originalUser = standingsData.users.find(u => u.user_id === originalRoster.owner_id);
         if (originalUser) {
           originalOwnerName = originalUser.display_name || originalUser.username;
           const finalRank = calculateRankFromRecord(originalRoster, standingsData.rosters);
           const totalTeams = standingsData.rosters.length;
-        } else if (draftResult && draftResult.position) {
+          const pickInRound = finalRank;
           draftPosition = `${pick.round}.${pickInRound.toString().padStart(2, '0')}`;
           console.log(`📈 ${originalOwnerName} finished rank ${finalRank}/${totalTeams} → pick ${draftPosition}`);
         }
@@ -224,10 +224,10 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     // Determine what to show based on pick year vs current year
     if (pickYear <= currentYear) {
       // Past or current season - try to find the drafted player
-      const selectedPlayer = findDraftedPlayer(draftData, draftPosition, standingsData.rosters.length);
-      if (selectedPlayer) {
-        console.log(`✅ Found drafted player: ${selectedPlayer}`);
-        return `${pick.season} ${pick.round}${roundSuffix} Round Pick (${selectedPlayer})`;
+      const draftResult = findDraftedPlayer(draftData, pick, standingsData.rosters.length);
+      if (draftResult && draftResult.player && draftResult.position) {
+        console.log(`✅ Found drafted player: ${draftResult.player}`);
+        return `${pick.season} ${pick.round}${roundSuffix} Round Pick (${draftResult.player})`;
       } else {
         console.log(`❌ No drafted player found for ${draftPosition}`);
         return `${pick.season} ${pick.round}${roundSuffix} Round Pick (${draftPosition})`;
@@ -236,10 +236,10 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       // Future season
       if (draftData && draftData.drafts.length > 0) {
         // Draft has occurred for future season
-        const selectedPlayer = findDraftedPlayer(draftData, draftPosition, standingsData.rosters.length);
-        if (selectedPlayer) {
-          console.log(`✅ Found future drafted player: ${selectedPlayer}`);
-          return `${pick.season} ${pick.round}${roundSuffix} Round Pick (${selectedPlayer})`;
+        const draftResult = findDraftedPlayer(draftData, pick, standingsData.rosters.length);
+        if (draftResult && draftResult.player) {
+          console.log(`✅ Found future drafted player: ${draftResult.player}`);
+          return `${pick.season} ${pick.round}${roundSuffix} Round Pick (${draftResult.player})`;
         }
       }
       // Draft hasn't occurred yet or no player found
