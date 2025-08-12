@@ -254,10 +254,10 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     return false;
   };
   
-  const findDraftedPlayer = (draftData: any, draftPosition: string, totalTeams: number): string | null => {
+  const findDraftedPlayer = (draftData: any, pick: DraftPick, totalTeams: number): { player: string | null; position: string | null } => {
     if (!draftData || !draftData.drafts.length) {
       console.log(`❌ No draft data available`);
-      return null;
+      return { player: null, position: null };
     }
     
     const draft = draftData.drafts[0]; // Use first draft
@@ -265,24 +265,39 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
     
     if (!draftPicks.length) {
       console.log(`❌ No draft picks found for draft ${draft.draft_id}`);
-      return null;
+      return { player: null, position: null };
     }
     
-    // Calculate overall pick number from position (e.g., "1.08" → pick 8)
-    const [roundStr, pickInRoundStr] = draftPosition.split('.');
-    const roundNum = parseInt(roundStr);
-    const pickInRound = parseInt(pickInRoundStr);
-    const overallPickNumber = ((roundNum - 1) * totalTeams) + pickInRound;
-    
-    console.log(`🔍 Looking for overall pick ${overallPickNumber} (${draftPosition}) in ${draftPicks.length} picks`);
-    
-    const selectedPick = draftPicks.find(p => p.pick_no === overallPickNumber);
-    if (selectedPick && selectedPick.player_id) {
-      return getPlayerName(selectedPick.player_id);
+    // Look for the actual draft pick by the original owner and round
+    const originalOwnerId = pick.original_owner || pick.previous_owner_id;
+    if (!originalOwnerId) {
+      console.log(`❌ No original owner ID found for pick`);
+      return { player: null, position: null };
     }
     
-    console.log(`❌ Pick ${overallPickNumber} not found or missing player_id`);
-    return null;
+    // Find picks by the original owner in the specified round
+    const ownerPicksInRound = draftPicks.filter(p => 
+      p.roster_id === originalOwnerId && 
+      Math.ceil(p.pick_no / totalTeams) === pick.round
+    );
+    
+    console.log(`🔍 Looking for ${pick.season} Round ${pick.round} pick by roster ${originalOwnerId}`);
+    console.log(`📋 Found ${ownerPicksInRound.length} picks by this owner in round ${pick.round}`);
+    
+    if (ownerPicksInRound.length > 0) {
+      const selectedPick = ownerPicksInRound[0]; // Take the first (should only be one per round)
+      const roundNum = Math.ceil(selectedPick.pick_no / totalTeams);
+      const pickInRound = ((selectedPick.pick_no - 1) % totalTeams) + 1;
+      const position = `${roundNum}.${pickInRound.toString().padStart(2, '0')}`;
+      
+      const playerName = selectedPick.player_id ? getPlayerName(selectedPick.player_id) : null;
+      
+      console.log(`✅ Found pick ${selectedPick.pick_no} (${position}) - Player: ${playerName || 'None'}`);
+      return { player: playerName, position };
+    }
+    
+    console.log(`❌ No draft pick found for this owner/round combination`);
+    return { player: null, position: null };
   };
   
   const calculateRankFromRecord = (roster: SleeperRoster, allRosters: SleeperRoster[]): number => {
