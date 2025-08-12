@@ -145,19 +145,21 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
         return targetSeason.league_id;
       }
       
-      // For seasons not in consolidated league, try to traverse the league chain  
-      const currentYear = parseInt(league.mostRecentSeason.season);
+      // If not found directly, this might be a future season or missing season
+      // For future seasons, we might need to use the current league ID
       const targetYear = parseInt(season);
+      const mostRecentYear = parseInt(league.mostRecentSeason.season);
       
-      // For adjacent seasons, try using previous_league_id
-      if (targetYear === currentYear - 1 && league.mostRecentSeason.previous_league_id) {
-        console.log(`Using previous_league_id for ${season}:`, league.mostRecentSeason.previous_league_id);
-        return league.mostRecentSeason.previous_league_id;
+      if (targetYear > mostRecentYear) {
+        // This is a future season - use the most recent league ID
+        console.log(`Using most recent league ID for future season ${season}:`, league.mostRecentSeason.league_id);
+        return league.mostRecentSeason.league_id;
       }
       
-      // Try to find by traversing the league chain
+      // For past seasons, try to traverse the league chain
       for (const leagueSeason of league.seasons) {
-        if (parseInt(leagueSeason.season) === targetYear + 1 && leagueSeason.previous_league_id) {
+        const seasonYear = parseInt(leagueSeason.season);
+        if (seasonYear === targetYear + 1 && leagueSeason.previous_league_id) {
           console.log(`Found ${season} via previous_league_id from ${leagueSeason.season}:`, leagueSeason.previous_league_id);
           return leagueSeason.previous_league_id;
         }
