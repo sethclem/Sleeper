@@ -360,11 +360,13 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       );
       
       if (ownerPicksInRound.length > 0 && ownerPicksInRound[0].player_id) {
-        const playerName = getPlayerName(ownerPicksInRound[0].player_id);
-        console.log(`✅ Found player: ${playerName} (Pick ${ownerPicksInRound[0].pick_no})`);
-        return playerName;
-      }
+    
+    // Verify this draft data is actually from the pick's season
+    if (draft.season !== pick.season) {
+      console.log(`🚫 Draft season mismatch: pick is ${pick.season}, draft is ${draft.season}`);
+      return null;
     }
+    
     
     console.log(`❌ No player found in ${pick.season} draft`);
     return null;
