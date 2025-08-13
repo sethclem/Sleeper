@@ -63,5 +63,6 @@ export const TradeSelector: React.FC<TradeSelectorProps> = ({
       console.error('❌ Error loading multi-season data:', error);
     }
   };
+}
 
 import { SleeperTrade, SleeperUser, SleeperRoster, PlayerInfo, DraftPick, DraftInfo, DraftPickDetail, ConsolidatedLeague } from '../types/sleeper';
